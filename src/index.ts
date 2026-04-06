@@ -20,3 +20,9 @@ export type { SSEComplianceResult } from "./sse-compliance.js";
 
 export { runContextCheck } from "./context-check.js";
 export type { ContextCheckResult } from "./context-check.js";
+
+export { extractFingerprint } from "./fingerprint-extractor.js";
+export type { FingerprintFeatureSet, IdentityAssessment, IdentityCandidate, IdentityStatus } from "./identity-report.js";
+export { matchCandidates, deriveVerdict, deriveVerdictFromClaimedModel } from "./candidate-matcher.js";
+export { FAMILY_BASELINES, claimedModelToFamily } from "./fingerprint-baseline.js";
+export type { FamilyBaseline } from "./fingerprint-baseline.js";
