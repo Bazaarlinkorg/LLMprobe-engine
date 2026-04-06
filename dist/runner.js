@@ -9,6 +9,8 @@ const probe_preflight_js_1 = require("./probe-preflight.js");
 const token_inflation_js_1 = require("./token-inflation.js");
 const sse_compliance_js_1 = require("./sse-compliance.js");
 const context_check_js_1 = require("./context-check.js");
+const fingerprint_extractor_js_1 = require("./fingerprint-extractor.js");
+const candidate_matcher_js_1 = require("./candidate-matcher.js");
 function parseJudgeScore(text) {
     const candidates = [];
     const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -409,6 +411,48 @@ async function runProbes(options) {
         results.push(result);
         onProgress?.(result, idx, probes.length);
     }
+    // ── Identity Phase ────────────────────────────────────────────────────────
+    let identityAssessment;
+    {
+        const featureResponses = {};
+        for (const r of results) {
+            if (r.status === "done" && r.response) {
+                const probe = probes.find(p => p.id === r.probeId);
+                if (probe?.scoring === "feature_extract") {
+                    featureResponses[r.probeId] = r.response;
+                }
+            }
+        }
+        const riskFlags = [];
+        for (const r of results) {
+            if (r.passed === false) {
+                const probe = probes.find(p => p.id === r.probeId);
+                if (probe && (probe.group === "integrity" || probe.group === "security")) {
+                    riskFlags.push(`${r.label}: ${r.passReason ?? r.error ?? "failed"}`);
+                }
+            }
+            if (r.passed === "warning" && r.probeId === "consistency_check") {
+                riskFlags.push("consistency_check warning: possible cache hit — fingerprint confidence reduced");
+            }
+        }
+        if (Object.keys(featureResponses).length > 0) {
+            const features = (0, fingerprint_extractor_js_1.extractFingerprint)(featureResponses);
+            const candidates = (0, candidate_matcher_js_1.matchCandidates)(features);
+            const { status, confidence, evidence, predictedFamily } = (0, candidate_matcher_js_1.deriveVerdictFromClaimedModel)(candidates, options.claimedModel);
+            const adjustedConfidence = riskFlags.length > 0
+                ? Math.max(0, confidence - 0.15 * Math.min(riskFlags.length, 3))
+                : confidence;
+            identityAssessment = {
+                status,
+                confidence: Math.round(adjustedConfidence * 100) / 100,
+                claimedModel: options.claimedModel,
+                predictedFamily,
+                predictedCandidates: candidates,
+                riskFlags,
+                evidence,
+            };
+        }
+    }
     // ── Finalize ──────────────────────────────────────────────────────────────
     const completedAt = new Date().toISOString();
     const { low, high } = (0, probe_score_js_1.computeProbeScore)(results.map(r => ({ status: r.status, passed: r.passed, neutral: r.neutral })));
@@ -417,6 +461,7 @@ async function runProbes(options) {
     return {
         baseUrl,
         modelId,
+        claimedModel: options.claimedModel,
         startedAt,
         completedAt,
         score: low,
@@ -424,6 +469,7 @@ async function runProbes(options) {
         totalInputTokens: totalIn > 0 ? totalIn : null,
         totalOutputTokens: totalOut > 0 ? totalOut : null,
         results,
+        identityAssessment,
     };
 }
 //# sourceMappingURL=runner.js.map

@@ -1,3 +1,4 @@
+import type { IdentityAssessment } from "./identity-report.js";
 export interface ProbeResult {
     probeId: string;
     label: string;
@@ -17,6 +18,7 @@ export interface ProbeResult {
 export interface RunReport {
     baseUrl: string;
     modelId: string;
+    claimedModel?: string;
     startedAt: string;
     completedAt: string;
     score: number;
@@ -24,6 +26,7 @@ export interface RunReport {
     totalInputTokens: number | null;
     totalOutputTokens: number | null;
     results: ProbeResult[];
+    identityAssessment?: IdentityAssessment;
 }
 /**
  * Baseline responses keyed by probeId.
@@ -55,6 +58,11 @@ export interface RunOptions {
      * Without a baseline, llm_judge probes are skipped.
      */
     baseline?: BaselineMap;
+    /**
+     * The model name the operator claims is running behind this endpoint.
+     * When provided, the identity phase compares observed behavior against this family.
+     */
+    claimedModel?: string;
 }
 export declare function runProbes(options: RunOptions): Promise<RunReport>;
 //# sourceMappingURL=runner.d.ts.map

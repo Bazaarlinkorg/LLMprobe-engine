@@ -72,7 +72,7 @@ const program = new commander_1.Command();
 program
     .name("bazaarlink-probe")
     .description("Run OpenAI-compatible API quality & integrity probes")
-    .version("0.1.0");
+    .version("0.2.0");
 program
     .command("run")
     .description("Run the full probe suite against an endpoint")
@@ -89,6 +89,7 @@ program
     .option("--judge-api-key <key>", "Judge endpoint API key")
     .option("--judge-model <id>", "Judge model ID")
     .option("--judge-threshold <n>", "Judge score threshold 1-10 (default: 7)", "7")
+    .option("--claimed-model <model>", "Model name the vendor claims — used for identity verification")
     .option("--quiet", "Suppress per-probe progress output", false)
     .action(async (opts) => {
     const timeoutMs = parseInt(opts.timeout, 10) || 180000;
@@ -153,6 +154,9 @@ program
             console.error(`  Baseline : none — llm_judge probes will return null`);
         console.error(`  Timeout  : ${timeoutMs}ms per probe\n`);
     }
+    if (!opts.quiet && opts.claimedModel) {
+        console.error(`  Claimed  : ${opts.claimedModel}`);
+    }
     const report = await (0, runner_js_1.runProbes)({
         baseUrl: opts.baseUrl,
         apiKey: opts.apiKey,
@@ -161,6 +165,7 @@ program
         timeoutMs,
         judge,
         baseline,
+        claimedModel: opts.claimedModel,
         onProgress: (result, index, total) => {
             if (!opts.quiet) {
                 const ic = icon(result);
@@ -184,6 +189,31 @@ program
             console.error(`  Tokens in : ${report.totalInputTokens}`);
         if (report.totalOutputTokens)
             console.error(`  Tokens out: ${report.totalOutputTokens}`);
+        if (report.identityAssessment) {
+            const ia = report.identityAssessment;
+            const statusIcon = ia.status === "match" ? PASS_ICON : ia.status === "mismatch" ? FAIL_ICON : "?";
+            console.error(`\n  Identity  : ${statusIcon} ${ia.status.toUpperCase()} (confidence: ${(ia.confidence * 100).toFixed(0)}%)`);
+            if (ia.claimedModel)
+                console.error(`  Claimed   : ${ia.claimedModel}`);
+            if (ia.predictedFamily)
+                console.error(`  Detected  : ${ia.predictedFamily}`);
+            if (ia.predictedCandidates.length > 0) {
+                console.error(`  Candidates:`);
+                for (const c of ia.predictedCandidates) {
+                    console.error(`    ${(c.score * 100).toFixed(0).padStart(3)}%  ${c.model}`);
+                }
+            }
+            if (ia.evidence.length > 0) {
+                console.error(`  Evidence  :`);
+                for (const e of ia.evidence)
+                    console.error(`    • ${e}`);
+            }
+            if (ia.riskFlags.length > 0) {
+                console.error(`  Risk flags: ${ia.riskFlags.length} endpoint anomalies reduce confidence`);
+                for (const f of ia.riskFlags.slice(0, 3))
+                    console.error(`    ${WARN_ICON} ${f.slice(0, 80)}`);
+            }
+        }
         console.error(`${"─".repeat(60)}\n`);
     }
     const json = JSON.stringify(report, null, 2);

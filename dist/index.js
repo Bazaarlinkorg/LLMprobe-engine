@@ -1,7 +1,7 @@
 "use strict";
 // src/index.ts — Public API for @bazaarlink/probe-engine (MIT)
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.runContextCheck = exports.checkSSECompliance = exports.TOKEN_INFLATION_THRESHOLD = exports.detectTokenInflation = exports.classifyPreflightResult = exports.computeProbeScore = exports.autoScore = exports.PROBE_SUITE = exports.runProbes = void 0;
+exports.claimedModelToFamily = exports.FAMILY_BASELINES = exports.deriveVerdictFromClaimedModel = exports.deriveVerdict = exports.matchCandidates = exports.extractFingerprint = exports.runContextCheck = exports.checkSSECompliance = exports.TOKEN_INFLATION_THRESHOLD = exports.detectTokenInflation = exports.classifyPreflightResult = exports.computeProbeScore = exports.autoScore = exports.PROBE_SUITE = exports.runProbes = void 0;
 var runner_js_1 = require("./runner.js");
 Object.defineProperty(exports, "runProbes", { enumerable: true, get: function () { return runner_js_1.runProbes; } });
 var probe_suite_js_1 = require("./probe-suite.js");
@@ -18,4 +18,13 @@ var sse_compliance_js_1 = require("./sse-compliance.js");
 Object.defineProperty(exports, "checkSSECompliance", { enumerable: true, get: function () { return sse_compliance_js_1.checkSSECompliance; } });
 var context_check_js_1 = require("./context-check.js");
 Object.defineProperty(exports, "runContextCheck", { enumerable: true, get: function () { return context_check_js_1.runContextCheck; } });
+var fingerprint_extractor_js_1 = require("./fingerprint-extractor.js");
+Object.defineProperty(exports, "extractFingerprint", { enumerable: true, get: function () { return fingerprint_extractor_js_1.extractFingerprint; } });
+var candidate_matcher_js_1 = require("./candidate-matcher.js");
+Object.defineProperty(exports, "matchCandidates", { enumerable: true, get: function () { return candidate_matcher_js_1.matchCandidates; } });
+Object.defineProperty(exports, "deriveVerdict", { enumerable: true, get: function () { return candidate_matcher_js_1.deriveVerdict; } });
+Object.defineProperty(exports, "deriveVerdictFromClaimedModel", { enumerable: true, get: function () { return candidate_matcher_js_1.deriveVerdictFromClaimedModel; } });
+var fingerprint_baseline_js_1 = require("./fingerprint-baseline.js");
+Object.defineProperty(exports, "FAMILY_BASELINES", { enumerable: true, get: function () { return fingerprint_baseline_js_1.FAMILY_BASELINES; } });
+Object.defineProperty(exports, "claimedModelToFamily", { enumerable: true, get: function () { return fingerprint_baseline_js_1.claimedModelToFamily; } });
 //# sourceMappingURL=index.js.map
