@@ -33,12 +33,12 @@ curl https://bazaarlink.ai/api/v1/models \
 ```bash
 node dist/cli.js run \
   --base-url https://bazaarlink.ai/api/v1 \
-  --api-key sk-... \
+  --api-key sk-bl-... \
   --model gpt-5.4 \
   --fetch-baseline https://bazaarlink.ai \
   --baseline-model openai/gpt-5.4 \
   --judge-base-url https://bazaarlink.ai/api/v1 \
-  --judge-api-key sk-... \
+  --judge-api-key sk-bl-... \
   --judge-model deepseek/deepseek-v3.2 \
   --output report.json
 ```
@@ -148,7 +148,7 @@ Run probes against a **trusted** endpoint and save responses as a baseline JSON 
 ```bash
 bazaarlink-probe collect-baseline \
   --base-url https://api.openai.com/v1 \
-  --api-key sk-... \
+  --api-key sk-openai-... \
   --model gpt-4o \
   --output baseline-gpt4o.json
 ```
@@ -161,11 +161,11 @@ The output file has the format `{ modelId, collectedAt, probes: [{ probeId, resp
 # Download BazaarLink's built-in baseline for gpt-4o
 bazaarlink-probe run \
   --base-url https://suspect-proxy.com/v1 \
-  --api-key sk-... \
+  --api-key sk-proxy-... \
   --model gpt-4o \
   --fetch-baseline https://bazaarlink.ai \
   --judge-base-url https://api.openai.com/v1 \
-  --judge-api-key sk-... \
+  --judge-api-key sk-openai-... \
   --judge-model gpt-4o-mini \
   --output report.json
 ```
@@ -176,18 +176,18 @@ bazaarlink-probe run \
 # Step 1: collect baseline from a trusted endpoint
 bazaarlink-probe collect-baseline \
   --base-url https://api.openai.com/v1 \
-  --api-key sk-... \
+  --api-key sk-openai-... \
   --model gpt-4o \
   --output baseline-gpt4o.json
 
 # Step 2: probe a suspect endpoint using that baseline
 bazaarlink-probe run \
   --base-url https://suspect-proxy.com/v1 \
-  --api-key sk-... \
+  --api-key sk-proxy-... \
   --model gpt-4o \
   --baseline baseline-gpt4o.json \
   --judge-base-url https://api.openai.com/v1 \
-  --judge-api-key sk-... \
+  --judge-api-key sk-openai-... \
   --judge-model gpt-4o-mini \
   --output report.json
 ```
@@ -262,12 +262,12 @@ const baseline: BaselineMap = {
 
 const report = await runProbes({
   baseUrl: "https://your-endpoint.com/v1",
-  apiKey: "sk-...",
+  apiKey: "sk-your-endpoint-...",
   modelId: "claude-opus-4-6",
   baseline,
   judge: {
     baseUrl: "https://api.openai.com/v1",
-    apiKey: "sk-...",
+    apiKey: "sk-openai-...",
     modelId: "gpt-4o-mini",
     threshold: 7,
   },
