@@ -1,49 +1,54 @@
 # @bazaarlink/probe-engine
 
-An open-source CLI tool and Node.js library for testing OpenAI-compatible API endpoints.  
-Runs a suite of quality, security, and integrity probes and generates a 0–100 score report.
+針對 OpenAI-compatible API 端點的開源 CLI 測試工具與 Node.js 函式庫。  
+執行品質、安全性、完整性探針，產出 0–100 評分報告。
 
-## Quick Start
+---
 
-### Step 1 — Find your baseline model ID
+## 快速開始
 
-Before running, discover which baseline model IDs are available:
+### 第一步 — 查詢可用的 Baseline 模型 ID
+
+執行前先確認目標模型有哪些官方 baseline 可用：
 
 ```bash
 curl https://bazaarlink.ai/api/probe/baselines
 ```
 
-Example response:
+回應範例：
 ```json
 {"models":["openai/gpt-5.4","openai/gpt-5.4-mini","anthropic/claude-sonnet-4.6",...]}
 ```
 
-> **Note:** The baseline model ID (e.g. `openai/gpt-5.4`) may differ from the model ID your endpoint accepts (e.g. `gpt-5.4`). Use `--baseline-model` to specify the baseline lookup key separately from `--model`.
+> **注意：** Baseline 的模型 ID（例如 `openai/gpt-5.4`）可能與你的端點所接受的 ID（例如 `gpt-5.4`）不同。請用 `--baseline-model` 單獨指定 baseline 查詢用的 ID。
 
-### Step 2 — Find your judge model ID
+### 第二步 — 查詢可用的 Judge 模型
 
 ```bash
 curl https://bazaarlink.ai/api/v1/models \
-  -H "Authorization: Bearer <YOUR_KEY>" \
+  -H "Authorization: Bearer <你的API金鑰>" \
   | python -m json.tool | grep '"id"'
 ```
 
-### Step 3 — Run the full probe suite
+### 第三步 — 執行完整探針套件
+
+> **以下範例使用 BazaarLink 端點做示範，各參數請依你的實際環境替換。**  
+> `--fetch-baseline` 與 `--judge-*` 為**選填**，僅影響 `llm_judge` 類型的探針。不填時這些探針會被跳過，其餘探針正常執行。
 
 ```bash
 node dist/cli.js run \
   --base-url https://bazaarlink.ai/api/v1 \
-  --api-key sk-bl-... \
+  --api-key <你的API金鑰> \
   --model gpt-5.4 \
-  --fetch-baseline https://bazaarlink.ai \
-  --baseline-model openai/gpt-5.4 \
-  --judge-base-url https://bazaarlink.ai/api/v1 \
-  --judge-api-key sk-bl-... \
-  --judge-model deepseek/deepseek-v3.2 \
+  --fetch-baseline https://bazaarlink.ai \        # 選填：下載官方 baseline
+  --baseline-model openai/gpt-5.4 \              # 選填：baseline 查詢用的模型 ID
+  --judge-base-url https://bazaarlink.ai/api/v1 \ # 選填：judge 端點
+  --judge-api-key <judge用的API金鑰> \             # 選填
+  --judge-model deepseek/deepseek-v3.2 \         # 選填：用來評分的模型
   --output report.json
 ```
 
-### Step 4 — Read the report
+### 第四步 — 查看報告
 
 ```
 BazaarLink Probe Engine
@@ -77,7 +82,7 @@ BazaarLink Probe Engine
 ────────────────────────────────────────────────────────────
 ```
 
-To inspect a specific probe's full response:
+查看特定探針的完整回應：
 
 ```bash
 python -c "
@@ -92,9 +97,11 @@ for p in r['results']:
 "
 ```
 
-## Install
+---
 
-### Option A: Local (no npm required)
+## 安裝
+
+### 方式 A：本地執行（無需發布 npm）
 
 ```bash
 git clone https://github.com/Bazaarlinkorg/LLMprobe-engine
@@ -104,170 +111,175 @@ npm run build
 node dist/cli.js run --help
 ```
 
-### Option B: Global CLI via npm
+### 方式 B：全域 CLI（透過 npm）
 
 ```bash
 npm install -g @bazaarlink/probe-engine
 bazaarlink-probe run --help
 ```
 
-## CLI Usage
+---
 
-### `run` — Probe an endpoint
+## CLI 完整參數
+
+### `run` — 對端點執行探針
 
 ```
 bazaarlink-probe run [options]
 
-Required:
-  --base-url <url>       Base URL of the OpenAI-compatible endpoint
-  --api-key <key>        API key
-  --model <id>           Model ID to test
+必填：
+  --base-url <url>       OpenAI-compatible 端點的 Base URL
+  --api-key <key>        API 金鑰
+  --model <id>           要測試的模型 ID
 
-Options:
-  --include-optional       Also run context length test (adds 5 requests)
-  --timeout <ms>           Per-probe timeout in ms (default: 180000)
-  --output <file>          Write JSON report to file (default: stdout)
-  --quiet                  Suppress progress output
+選填：
+  --include-optional       額外執行 context length 測試（增加約 5 次請求）
+  --timeout <ms>           每個探針的逾時時間，毫秒（預設：180000）
+  --output <file>          將 JSON 報告寫入檔案（預設：stdout）
+  --quiet                  不顯示執行過程
 
-Baseline (required for llm_judge similarity scoring):
-  --baseline <file>        Local baseline JSON (from collect-baseline)
-  --fetch-baseline <url>   BazaarLink base URL to download official baselines
-  --baseline-model <id>    Model to use when fetching baselines (default: --model)
+Baseline（llm_judge 相似度評分所需，不填則跳過 llm_judge 探針）：
+  --baseline <file>        本地 baseline JSON（由 collect-baseline 產生）
+  --fetch-baseline <url>   從 BazaarLink 下載官方 baseline
+  --baseline-model <id>    下載 baseline 時使用的模型 ID（預設：同 --model）
 
-Judge (required for llm_judge evaluation):
+Judge（llm_judge 評分所需，不填則跳過 llm_judge 探針）：
   --judge-base-url <url>
   --judge-api-key <key>
   --judge-model <id>
-  --judge-threshold <n>    Similarity threshold 1-10 (default: 7)
+  --judge-threshold <n>    相似度閾值 1-10（預設：7）
 ```
 
-### `collect-baseline` — Build a local baseline file
+### `collect-baseline` — 建立本地 baseline 檔案
 
-Run probes against a **trusted** endpoint and save responses as a baseline JSON for later comparison:
+對**可信任**的端點執行探針，將回應存成 baseline JSON 供後續比對：
 
 ```bash
 bazaarlink-probe collect-baseline \
   --base-url https://api.openai.com/v1 \
-  --api-key sk-openai-... \
+  --api-key <OpenAI金鑰> \
   --model gpt-4o \
   --output baseline-gpt4o.json
 ```
 
-The output file has the format `{ modelId, collectedAt, probes: [{ probeId, responseText, updatedAt }] }`.
+輸出格式：`{ modelId, collectedAt, probes: [{ probeId, responseText, updatedAt }] }`
 
-### Example: compare suspect proxy to BazaarLink official baseline
+### 範例：對比可疑 Proxy 與 BazaarLink 官方 baseline
 
 ```bash
-# Download BazaarLink's built-in baseline for gpt-4o
 bazaarlink-probe run \
   --base-url https://suspect-proxy.com/v1 \
-  --api-key sk-proxy-... \
+  --api-key <Proxy金鑰> \
   --model gpt-4o \
   --fetch-baseline https://bazaarlink.ai \
   --judge-base-url https://api.openai.com/v1 \
-  --judge-api-key sk-openai-... \
+  --judge-api-key <OpenAI金鑰> \
   --judge-model gpt-4o-mini \
   --output report.json
 ```
 
-### Example: compare against your own locally-collected baseline
+### 範例：對比可疑 Proxy 與自行收集的 baseline
 
 ```bash
-# Step 1: collect baseline from a trusted endpoint
+# 第一步：從可信任端點收集 baseline
 bazaarlink-probe collect-baseline \
   --base-url https://api.openai.com/v1 \
-  --api-key sk-openai-... \
+  --api-key <OpenAI金鑰> \
   --model gpt-4o \
   --output baseline-gpt4o.json
 
-# Step 2: probe a suspect endpoint using that baseline
+# 第二步：用該 baseline 測試可疑端點
 bazaarlink-probe run \
   --base-url https://suspect-proxy.com/v1 \
-  --api-key sk-proxy-... \
+  --api-key <Proxy金鑰> \
   --model gpt-4o \
   --baseline baseline-gpt4o.json \
   --judge-base-url https://api.openai.com/v1 \
-  --judge-api-key sk-openai-... \
+  --judge-api-key <OpenAI金鑰> \
   --judge-model gpt-4o-mini \
   --output report.json
 ```
 
-## Probe Suite
+---
 
-### Quality
+## 探針清單
 
-| ID | Scoring | Description |
+### Quality（品質）
+
+| ID | 評分方式 | 說明 |
 |---|---|---|
 | zh_reasoning | llm_judge | 中文推理能力 |
-| code_gen | llm_judge | Code generation quality |
-| instruction_follow | exact_match | Strict instruction following |
-| en_reasoning | llm_judge | English reasoning |
-| math_logic | exact_match | Math reasoning |
-| hallucination | llm_judge | Hallucination resistance |
-| censorship | keyword_match | Taiwan political question |
-| json_output | exact_match | Pure JSON output |
-| prompt_injection | keyword_match | Prompt injection resistance *(neutral)* |
+| code_gen | llm_judge | 程式碼生成品質 |
+| instruction_follow | exact_match | 嚴格指令遵從 |
+| en_reasoning | llm_judge | 英文推理能力 |
+| math_logic | exact_match | 數學邏輯推理 |
+| hallucination | llm_judge | 幻覺抵抗能力 |
+| censorship | keyword_match | 審查偵測（台灣政治問題） |
+| json_output | exact_match | 純 JSON 輸出 |
+| prompt_injection | keyword_match | 提示注入抵抗 *(neutral)* |
 
-### Security
+### Security（安全性）
 
-| ID | Scoring | Description |
+| ID | 評分方式 | 說明 |
 |---|---|---|
-| infra_probe | keyword_match | Infrastructure leak detection |
-| bedrock_probe | keyword_match | AWS Bedrock identifier leak |
-| identity_leak | keyword_match | System prompt leak detection *(multilingual: EN/KO/ZH)* |
+| infra_probe | keyword_match | 基礎設施資訊洩露偵測 |
+| bedrock_probe | keyword_match | AWS Bedrock 識別碼洩露 |
+| identity_leak | keyword_match | System prompt 洩露偵測 *(多語言：英/韓/繁中)* |
 
-### Integrity
+### Integrity（完整性）
 
-| ID | Scoring | Description |
+| ID | 評分方式 | 說明 |
 |---|---|---|
-| knowledge_cutoff | keyword_match | Knowledge cutoff honesty |
-| symbol_exact | exact_match | Unicode symbol pass-through |
-| cache_detection | header_check | Response cache detection |
-| token_inflation | token_check | Hidden system prompt detection |
-| sse_compliance | sse_compliance | SSE stream format validation |
-| thinking_block | thinking_check | Anthropic beta header forwarding *(neutral)* |
-| consistency_check | consistency_check | Response caching detection |
-| context_length *(optional)* | context_check | Actual context window measurement |
+| knowledge_cutoff | keyword_match | 知識截止誠實性 |
+| symbol_exact | exact_match | Unicode 字符精確回傳 |
+| cache_detection | header_check | 回應快取偵測 |
+| token_inflation | token_check | 隱藏 system prompt 偵測 |
+| sse_compliance | sse_compliance | SSE 串流格式驗證 |
+| thinking_block | thinking_check | Anthropic beta header 轉發 *(neutral)* |
+| consistency_check | consistency_check | 回應快取一致性偵測 |
+| context_length *(optional)* | context_check | 實際 context window 測量 |
 
-### Identity *(neutral — fingerprint collection, not scored)*
+### Identity（身份識別）*(全部 neutral — 僅收集特徵，不計入評分)*
 
-| ID | Scoring | Description |
+| ID | 評分方式 | 說明 |
 |---|---|---|
-| identity_style_en | feature_extract | English writing style fingerprint |
+| identity_style_en | feature_extract | 英文寫作風格特徵 |
 | identity_style_zh_tw | feature_extract | 繁體中文風格識別 |
-| identity_reasoning_shape | feature_extract | Reasoning format preference |
-| identity_self_knowledge | feature_extract | Model self-description collection |
-| identity_list_format | feature_extract | List formatting preference |
-| identity_refusal_pattern | keyword_match | Refusal phrase pattern detection |
-| identity_json_discipline | keyword_match | JSON-only instruction compliance |
-| identity_capability_claim | keyword_match | False real-time capability detection |
+| identity_reasoning_shape | feature_extract | 推理格式偏好 |
+| identity_self_knowledge | feature_extract | 模型自我描述收集 |
+| identity_list_format | feature_extract | 條列格式偏好 |
+| identity_refusal_pattern | keyword_match | 拒答慣用語偵測 |
+| identity_json_discipline | keyword_match | JSON-only 指令遵守度 |
+| identity_capability_claim | keyword_match | 虛假即時能力偵測 |
 
-## Customising Probes
+---
 
-To add multilingual keywords, mark probes as neutral, or create new probes entirely, see the step-by-step guide:
+## 自訂探針
+
+如需新增多語言關鍵字、將探針標記為 neutral、或新增全新探針，請參考逐步說明：
 
 [`docs/probe-modification-guide.md`](docs/probe-modification-guide.md)
 
-## Programmatic Usage
+---
+
+## 程式化使用
 
 ```typescript
 import { runProbes, type BaselineMap } from "@bazaarlink/probe-engine";
 
-// Optional: load a baseline for similarity-based judge scoring
 const baseline: BaselineMap = {
   zh_reasoning: "已知條件：x = 5，y = 3...",
   code_gen: "def fibonacci(n):...",
-  // ...
 };
 
 const report = await runProbes({
   baseUrl: "https://your-endpoint.com/v1",
-  apiKey: "sk-your-endpoint-...",
+  apiKey: "<你的API金鑰>",
   modelId: "claude-opus-4-6",
-  baseline,
-  judge: {
+  baseline,           // 選填
+  judge: {            // 選填
     baseUrl: "https://api.openai.com/v1",
-    apiKey: "sk-openai-...",
+    apiKey: "<Judge用的API金鑰>",
     modelId: "gpt-4o-mini",
     threshold: 7,
   },
@@ -279,7 +291,9 @@ const report = await runProbes({
 console.log(`Score: ${report.score}/100`);
 ```
 
-## Report JSON Schema
+---
+
+## 報告 JSON 格式
 
 ```json
 {
@@ -312,15 +326,21 @@ console.log(`Score: ${report.score}/100`);
 }
 ```
 
-## Exit Codes
+---
 
-- `0` — Score ≥ 50
-- `1` — Score < 50
+## 結束碼
 
-## Online Tool
+- `0` — 分數 ≥ 50
+- `1` — 分數 < 50
 
-For a full-featured web UI with baseline comparison, historical tracking, and detailed reports, visit **[bazaarlink.ai/probe](https://bazaarlink.ai/probe)**.
+---
 
-## License
+## 線上工具
+
+完整 Web UI（含 baseline 比對、歷史追蹤、詳細報告）：**[bazaarlink.ai/probe](https://bazaarlink.ai/probe)**
+
+---
+
+## 授權
 
 MIT © BazaarLink
