@@ -49,7 +49,7 @@ export interface RunOptions {
   modelId: string;
   /** Include optional probes (e.g. context_length). Default: false */
   includeOptional?: boolean;
-  /** Timeout per probe request in ms. Default: 300_000 */
+  /** Timeout per probe request in ms. Default: 180_000 */
   timeoutMs?: number;
   /** Called after each probe completes */
   onProgress?: (result: ProbeResult, index: number, total: number) => void;
@@ -157,7 +157,7 @@ export async function runProbes(options: RunOptions): Promise<RunReport> {
     apiKey,
     modelId,
     includeOptional = false,
-    timeoutMs = 300_000,
+    timeoutMs = 180_000,
     onProgress,
     judge,
     baseline,
@@ -332,7 +332,7 @@ export async function runProbes(options: RunOptions): Promise<RunReport> {
           messages: [{ role: "user", content: probe.prompt }],
           stream: useStream,
           ...(useStream ? { stream_options: { include_usage: true } } : {}),
-          max_tokens: probe.scoring === "exact_match" ? 512 : 1024,
+          max_tokens: probe.scoring === "exact_match" ? 512 : 4096,
           temperature: probe.scoring === "exact_match" ? 0 : 0.3,
         }),
         signal: AbortSignal.timeout(timeoutMs),
