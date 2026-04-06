@@ -1,3 +1,5 @@
+**繁體中文** | [English](README.en.md)
+
 # @bazaarlink/probe-engine
 
 針對 OpenAI-compatible API 端點的開源 CLI 測試工具與 Node.js 函式庫。  
