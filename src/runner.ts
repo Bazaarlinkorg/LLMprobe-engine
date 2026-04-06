@@ -7,6 +7,9 @@ import { classifyPreflightResult } from "./probe-preflight.js";
 import { detectTokenInflation, TOKEN_INFLATION_THRESHOLD } from "./token-inflation.js";
 import { checkSSECompliance } from "./sse-compliance.js";
 import { runContextCheck } from "./context-check.js";
+import { extractFingerprint } from "./fingerprint-extractor.js";
+import { matchCandidates, deriveVerdictFromClaimedModel } from "./candidate-matcher.js";
+import type { IdentityAssessment } from "./identity-report.js";
 
 export interface ProbeResult {
   probeId: string;
@@ -28,6 +31,7 @@ export interface ProbeResult {
 export interface RunReport {
   baseUrl: string;
   modelId: string;
+  claimedModel?: string;
   startedAt: string;
   completedAt: string;
   score: number;       // conservative 0-100
@@ -35,6 +39,7 @@ export interface RunReport {
   totalInputTokens: number | null;
   totalOutputTokens: number | null;
   results: ProbeResult[];
+  identityAssessment?: IdentityAssessment;
 }
 
 /**
@@ -68,6 +73,11 @@ export interface RunOptions {
    * Without a baseline, llm_judge probes are skipped.
    */
   baseline?: BaselineMap;
+  /**
+   * The model name the operator claims is running behind this endpoint.
+   * When provided, the identity phase compares observed behavior against this family.
+   */
+  claimedModel?: string;
 }
 
 function parseJudgeScore(text: string): { score: number; reason: string } | null {
@@ -460,6 +470,55 @@ export async function runProbes(options: RunOptions): Promise<RunReport> {
     onProgress?.(result, idx, probes.length);
   }
 
+  // ── Identity Phase ────────────────────────────────────────────────────────
+  let identityAssessment: IdentityAssessment | undefined;
+  {
+    const featureResponses: Record<string, string> = {};
+    for (const r of results) {
+      if (r.status === "done" && r.response) {
+        const probe = probes.find(p => p.id === r.probeId);
+        if (probe?.scoring === "feature_extract") {
+          featureResponses[r.probeId] = r.response;
+        }
+      }
+    }
+
+    const riskFlags: string[] = [];
+    for (const r of results) {
+      if (r.passed === false) {
+        const probe = probes.find(p => p.id === r.probeId);
+        if (probe && (probe.group === "integrity" || probe.group === "security")) {
+          riskFlags.push(`${r.label}: ${r.passReason ?? r.error ?? "failed"}`);
+        }
+      }
+      if (r.passed === "warning" && r.probeId === "consistency_check") {
+        riskFlags.push("consistency_check warning: possible cache hit — fingerprint confidence reduced");
+      }
+    }
+
+    if (Object.keys(featureResponses).length > 0) {
+      const features = extractFingerprint(featureResponses);
+      const candidates = matchCandidates(features);
+      const { status, confidence, evidence, predictedFamily } = deriveVerdictFromClaimedModel(
+        candidates,
+        options.claimedModel,
+      );
+      const adjustedConfidence = riskFlags.length > 0
+        ? Math.max(0, confidence - 0.15 * Math.min(riskFlags.length, 3))
+        : confidence;
+
+      identityAssessment = {
+        status,
+        confidence: Math.round(adjustedConfidence * 100) / 100,
+        claimedModel: options.claimedModel,
+        predictedFamily,
+        predictedCandidates: candidates,
+        riskFlags,
+        evidence,
+      };
+    }
+  }
+
   // ── Finalize ──────────────────────────────────────────────────────────────
   const completedAt = new Date().toISOString();
   const { low, high } = computeProbeScore(results.map(r => ({ status: r.status, passed: r.passed, neutral: r.neutral })));
@@ -469,6 +528,7 @@ export async function runProbes(options: RunOptions): Promise<RunReport> {
   return {
     baseUrl,
     modelId,
+    claimedModel: options.claimedModel,
     startedAt,
     completedAt,
     score: low,
@@ -476,5 +536,6 @@ export async function runProbes(options: RunOptions): Promise<RunReport> {
     totalInputTokens: totalIn > 0 ? totalIn : null,
     totalOutputTokens: totalOut > 0 ? totalOut : null,
     results,
+    identityAssessment,
   };
 }
