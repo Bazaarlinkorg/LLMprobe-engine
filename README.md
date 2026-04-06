@@ -1,4 +1,4 @@
-**繁體中文** | [English](README.en.md)
+**繁體中文** | [English](README.en.md) | [简体中文](README.zh-CN.md)
 
 # @bazaarlink/probe-engine
 
