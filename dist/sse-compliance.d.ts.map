@@ -1,0 +1,1 @@
+{"version":3,"file":"sse-compliance.d.ts","sourceRoot":"","sources":["../src/sse-compliance.ts"],"names":[],"mappings":"AAEA,MAAM,WAAW,mBAAmB;IAClC,MAAM,EAAE,OAAO,CAAC;IAChB,OAAO,EAAE,OAAO,CAAC;IACjB,SAAS,EAAE,MAAM,CAAC;IAClB,mBAAmB,EAAE,MAAM,CAAC;IAC5B,MAAM,EAAE,MAAM,EAAE,CAAC;CAClB;AAED,wBAAgB,kBAAkB,CAAC,KAAK,EAAE,MAAM,EAAE,GAAG,mBAAmB,CAqCvE"}

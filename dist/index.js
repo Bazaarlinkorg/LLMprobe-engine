@@ -1,0 +1,21 @@
+"use strict";
+// src/index.ts — Public API for @bazaarlink/probe-engine (MIT)
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.runContextCheck = exports.checkSSECompliance = exports.TOKEN_INFLATION_THRESHOLD = exports.detectTokenInflation = exports.classifyPreflightResult = exports.computeProbeScore = exports.autoScore = exports.PROBE_SUITE = exports.runProbes = void 0;
+var runner_js_1 = require("./runner.js");
+Object.defineProperty(exports, "runProbes", { enumerable: true, get: function () { return runner_js_1.runProbes; } });
+var probe_suite_js_1 = require("./probe-suite.js");
+Object.defineProperty(exports, "PROBE_SUITE", { enumerable: true, get: function () { return probe_suite_js_1.PROBE_SUITE; } });
+Object.defineProperty(exports, "autoScore", { enumerable: true, get: function () { return probe_suite_js_1.autoScore; } });
+var probe_score_js_1 = require("./probe-score.js");
+Object.defineProperty(exports, "computeProbeScore", { enumerable: true, get: function () { return probe_score_js_1.computeProbeScore; } });
+var probe_preflight_js_1 = require("./probe-preflight.js");
+Object.defineProperty(exports, "classifyPreflightResult", { enumerable: true, get: function () { return probe_preflight_js_1.classifyPreflightResult; } });
+var token_inflation_js_1 = require("./token-inflation.js");
+Object.defineProperty(exports, "detectTokenInflation", { enumerable: true, get: function () { return token_inflation_js_1.detectTokenInflation; } });
+Object.defineProperty(exports, "TOKEN_INFLATION_THRESHOLD", { enumerable: true, get: function () { return token_inflation_js_1.TOKEN_INFLATION_THRESHOLD; } });
+var sse_compliance_js_1 = require("./sse-compliance.js");
+Object.defineProperty(exports, "checkSSECompliance", { enumerable: true, get: function () { return sse_compliance_js_1.checkSSECompliance; } });
+var context_check_js_1 = require("./context-check.js");
+Object.defineProperty(exports, "runContextCheck", { enumerable: true, get: function () { return context_check_js_1.runContextCheck; } });
+//# sourceMappingURL=index.js.map

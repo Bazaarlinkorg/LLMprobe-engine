@@ -1,0 +1,41 @@
+{
+  "name": "@bazaarlink/probe-engine",
+  "version": "0.1.0",
+  "description": "BazaarLink Probe Engine — OpenAI-compatible API quality & integrity test suite (CLI)",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "bazaarlink-probe": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/cli.ts"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "commander": "^12.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0"
+  },
+  "keywords": [
+    "openai",
+    "llm",
+    "api",
+    "proxy",
+    "test",
+    "probe",
+    "quality",
+    "integrity",
+    "cli"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BazaarLink/LLMprobe-engine.git"
+  }
+}

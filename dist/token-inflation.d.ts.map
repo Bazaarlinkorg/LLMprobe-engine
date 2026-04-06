@@ -1,0 +1,1 @@
+{"version":3,"file":"token-inflation.d.ts","sourceRoot":"","sources":["../src/token-inflation.ts"],"names":[],"mappings":"AAEA,eAAO,MAAM,yBAAyB,KAAK,CAAC;AAE5C,MAAM,WAAW,oBAAoB;IACnC,QAAQ,EAAE,OAAO,CAAC;IAClB,kBAAkB,EAAE,MAAM,CAAC;IAC3B,eAAe,EAAE,MAAM,CAAC;CACzB;AAED,wBAAgB,oBAAoB,CAClC,YAAY,EAAE,MAAM,EACpB,SAAS,SAA4B,GACpC,oBAAoB,CAOtB"}

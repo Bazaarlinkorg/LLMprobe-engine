@@ -1,0 +1,1 @@
+{"version":3,"file":"probe-preflight.d.ts","sourceRoot":"","sources":["../src/probe-preflight.ts"],"names":[],"mappings":"AAEA,MAAM,WAAW,gBAAgB;IAC/B,OAAO,EAAE,IAAI,GAAG,OAAO,GAAG,MAAM,CAAC;IACjC,MAAM,EAAE,MAAM,CAAC;CAChB;AAaD,wBAAgB,uBAAuB,CAAC,MAAM,EAAE,MAAM,EAAE,OAAO,EAAE,MAAM,GAAG,gBAAgB,CAoBzF"}
