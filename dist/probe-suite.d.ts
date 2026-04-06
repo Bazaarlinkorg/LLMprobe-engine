@@ -1,5 +1,5 @@
-export type ProbeGroup = "quality" | "security" | "integrity";
-export type ScoringMode = "llm_judge" | "keyword_match" | "exact_match" | "header_check" | "human_review" | "token_check" | "sse_compliance" | "thinking_check" | "consistency_check" | "context_check";
+export type ProbeGroup = "quality" | "security" | "integrity" | "identity";
+export type ScoringMode = "llm_judge" | "keyword_match" | "exact_match" | "header_check" | "human_review" | "token_check" | "sse_compliance" | "thinking_check" | "consistency_check" | "context_check" | "feature_extract";
 export interface ProbeDefinition {
     id: string;
     label: string;

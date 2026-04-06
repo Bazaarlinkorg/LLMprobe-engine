@@ -372,6 +372,10 @@ async function runProbes(options) {
                 passed = autoResult.passed;
                 passReason = autoResult.reason;
             }
+            else if (probe.scoring === "feature_extract") {
+                passed = null;
+                passReason = "identity feature probe — response collected for fingerprint analysis";
+            }
             else if (probe.scoring === "llm_judge") {
                 // Use judge endpoint + baseline for similarity scoring
                 if (judge && baseline && baseline[probe.id]) {
