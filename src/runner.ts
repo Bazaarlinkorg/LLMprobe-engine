@@ -1,7 +1,7 @@
 // src/runner.ts — Core probe runner for @bazaarlink/probe-engine (MIT)
 // No framework dependencies — uses only Node.js 18+ built-in fetch.
 
-import { PROBE_SUITE, autoScore, type ProbeDefinition } from "./probe-suite.js";
+import { PROBE_SUITE, autoScore, generateCanary, type ProbeDefinition } from "./probe-suite.js";
 import { computeProbeScore } from "./probe-score.js";
 import { classifyPreflightResult } from "./probe-preflight.js";
 import { detectTokenInflation, TOKEN_INFLATION_THRESHOLD } from "./token-inflation.js";
@@ -9,6 +9,11 @@ import { checkSSECompliance } from "./sse-compliance.js";
 import { runContextCheck } from "./context-check.js";
 import { extractFingerprint } from "./fingerprint-extractor.js";
 import { matchCandidates, deriveVerdictFromClaimedModel } from "./candidate-matcher.js";
+import { classifyChannelSignature } from "./channel-signature.js";
+import { extractThinkingBlock, verifySignatureRoundtrip } from "./signature-probe.js";
+import { judgeFingerprint } from "./fingerprint-judge.js";
+import { embedProbeResponses, pickTopVectorScores, type ReferenceEmbedding } from "./fingerprint-vectors.js";
+import { fuseScores } from "./fingerprint-fusion.js";
 import type { IdentityAssessment } from "./identity-report.js";
 
 export interface ProbeResult {
@@ -78,6 +83,26 @@ export interface RunOptions {
    * When provided, the identity phase compares observed behavior against this family.
    */
   claimedModel?: string;
+  /**
+   * Judge endpoint for identity fingerprinting (optional LLM judge signal).
+   * When supplied, the identity phase calls this judge to classify model family.
+   */
+  identityJudge?: {
+    baseUrl: string;
+    apiKey: string;
+    modelId: string;
+  };
+  /**
+   * Embeddings endpoint for identity fingerprinting (optional vector signal).
+   * When supplied, probe responses are embedded and compared against family references.
+   */
+  embeddingEndpoint?: {
+    baseUrl: string;
+    apiKey: string;
+    modelId: string;
+    /** Reference embeddings (family → embedding vector). If absent, vector signal is skipped. */
+    references?: ReferenceEmbedding[];
+  };
 }
 
 function parseJudgeScore(text: string): { score: number; reason: string } | null {
@@ -209,6 +234,204 @@ export async function runProbes(options: RunOptions): Promise<RunReport> {
     idx++;
     let result: ProbeResult;
 
+    // ── channel_signature ─────────────────────────────────────────────────
+    if (probe.scoring === "channel_signature") {
+      const t0 = Date.now();
+      try {
+        const r = await fetch(chatUrl, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: modelId, messages: [{ role: "user", content: probe.prompt }], stream: false, max_tokens: probe.maxTokens ?? 16 }),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        const dur = Date.now() - t0;
+        const bodyText = await r.text();
+        const responseHeaders: Record<string, string> = {};
+        r.headers.forEach((val, key) => { responseHeaders[key.toLowerCase()] = val; });
+        let messageId: string | null = null;
+        try { messageId = (JSON.parse(bodyText) as { id?: string }).id ?? null; } catch { /* ok */ }
+        const sig = classifyChannelSignature({ headers: responseHeaders, messageId, rawBody: bodyText });
+        result = {
+          probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? true,
+          status: "done", passed: null, ttftMs: dur, durationMs: dur, inputTokens: null, outputTokens: null, tps: null,
+          response: `channel=${sig.channel} confidence=${sig.confidence} evidence=[${sig.evidence.join(",")}]`,
+          passReason: `Upstream channel: ${sig.channel} (confidence: ${(sig.confidence * 100).toFixed(0)}%)`,
+          error: null,
+        };
+      } catch (e) {
+        result = { probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? true,
+          status: "error", passed: null, passReason: null, ttftMs: null, durationMs: null,
+          inputTokens: null, outputTokens: null, tps: null, response: null, error: (e as Error).message?.slice(0, 300) ?? "Unknown" };
+      }
+      results.push(result);
+      onProgress?.(result, idx, probes.length);
+      continue;
+    }
+
+    // ── signature_verify (AC-5) ───────────────────────────────────────────
+    if (probe.scoring === "signature_verify") {
+      const t0 = Date.now();
+      try {
+        // Step 1: get thinking block from native endpoint
+        const nativeUrl = baseUrl.replace(/\/+$/, "") + "/v1/messages";
+        const headers1: Record<string, string> = {
+          "content-type": "application/json",
+          "anthropic-version": "2023-06-01",
+          "x-api-key": apiKey,
+        };
+        const resp1 = await fetch(nativeUrl, {
+          method: "POST",
+          headers: headers1,
+          body: JSON.stringify({
+            model: modelId,
+            max_tokens: probe.maxTokens ?? 1024,
+            thinking: { type: "enabled", budget_tokens: 1024 },
+            messages: [{ role: "user", content: probe.prompt }],
+          }),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        const body1 = await resp1.text();
+        const dur1 = Date.now() - t0;
+
+        if (resp1.status === 404 || resp1.status === 405) {
+          result = { probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? false,
+            status: "done", durationMs: dur1, passed: "warning",
+            passReason: "Provider does not expose native /v1/messages endpoint — signature_verify skipped",
+            response: body1.slice(0, 300), ttftMs: dur1, inputTokens: null, outputTokens: null, tps: null, error: null };
+          results.push(result);
+          onProgress?.(result, idx, probes.length);
+          continue;
+        }
+        if (!resp1.ok) {
+          result = { probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? false,
+            status: "done", durationMs: dur1, passed: "warning",
+            passReason: `HTTP ${resp1.status} from native endpoint`,
+            response: body1.slice(0, 300), ttftMs: dur1, inputTokens: null, outputTokens: null, tps: null, error: null };
+          results.push(result);
+          onProgress?.(result, idx, probes.length);
+          continue;
+        }
+
+        let parsed1: unknown;
+        try { parsed1 = JSON.parse(body1); } catch {
+          result = { probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? false,
+            status: "done", durationMs: dur1, passed: false,
+            passReason: "Response is not valid JSON",
+            response: body1.slice(0, 300), ttftMs: dur1, inputTokens: null, outputTokens: null, tps: null, error: null };
+          results.push(result);
+          onProgress?.(result, idx, probes.length);
+          continue;
+        }
+
+        const thinkingBlock = extractThinkingBlock(parsed1);
+        if (!thinkingBlock) {
+          result = { probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? false,
+            status: "done", durationMs: dur1, passed: false,
+            passReason: "No thinking block found — provider may not support extended thinking",
+            response: body1.slice(0, 300), ttftMs: dur1, inputTokens: null, outputTokens: null, tps: null, error: null };
+          results.push(result);
+          onProgress?.(result, idx, probes.length);
+          continue;
+        }
+
+        // Extract assistant text from first response
+        let assistantText = "";
+        const content1 = (parsed1 as { content?: unknown[] }).content;
+        if (Array.isArray(content1)) {
+          for (const b of content1) {
+            if (b && typeof b === "object" && (b as { type?: string }).type === "text") {
+              assistantText += (b as { text?: string }).text ?? "";
+            }
+          }
+        }
+
+        // Step 2: round-trip the thinking block
+        const verifyResult = await verifySignatureRoundtrip({
+          endpoint: nativeUrl,
+          apiKey,
+          model: modelId,
+          originalUserPrompt: probe.prompt,
+          thinkingBlock,
+          assistantText,
+          followUpUserPrompt: "Is 7 a prime number? Answer yes or no.",
+          signal: AbortSignal.timeout(60_000),
+        });
+
+        const dur2 = Date.now() - t0;
+        result = {
+          probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? false,
+          status: "done", durationMs: dur2, ttftMs: dur2,
+          inputTokens: null, outputTokens: null, tps: null,
+          response: body1.slice(0, 500),
+          passed: verifyResult.verified ? true : verifyResult.reason === "signature_rejected" ? false : "warning",
+          passReason: verifyResult.verified
+            ? "Signature round-trip accepted (HTTP 200) — genuine Anthropic upstream"
+            : verifyResult.reason === "signature_rejected"
+              ? `Signature rejected (HTTP 400) — tampered or synthetic thinking block`
+              : `HTTP ${verifyResult.httpStatus}: ${verifyResult.rawErrorSnippet?.slice(0, 100) ?? "unknown"}`,
+          error: null,
+        };
+      } catch (e) {
+        result = { probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? false,
+          status: "error", passed: null, passReason: null, ttftMs: null, durationMs: null,
+          inputTokens: null, outputTokens: null, tps: null, response: null, error: (e as Error).message?.slice(0, 300) ?? "Unknown" };
+      }
+      results.push(result);
+      onProgress?.(result, idx, probes.length);
+      continue;
+    }
+
+    // ── adaptive_check (AC-1.b) ───────────────────────────────────────────
+    if (probe.scoring === "adaptive_check") {
+      if (!probe.adaptiveTriggerPrompt) {
+        result = { probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? false,
+          status: "skipped", passed: null, passReason: "adaptiveTriggerPrompt not set", ttftMs: null, durationMs: null,
+          inputTokens: null, outputTokens: null, tps: null, response: null, error: null };
+        results.push(result);
+        onProgress?.(result, idx, probes.length);
+        continue;
+      }
+      const t0 = Date.now();
+      const makeRequest = async (prompt: string): Promise<string | null> => {
+        try {
+          const r = await fetch(chatUrl, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ model: modelId, messages: [{ role: "user", content: prompt }], stream: false, max_tokens: 256, temperature: 0 }),
+            signal: AbortSignal.timeout(timeoutMs),
+          });
+          if (!r.ok) return null;
+          const d = await r.json() as { choices?: Array<{ message?: { content?: string } }> };
+          return (d.choices?.[0]?.message?.content ?? "").trim();
+        } catch { return null; }
+      };
+      const [neutralResp, triggerResp] = await Promise.all([
+        makeRequest(probe.prompt),
+        makeRequest(probe.adaptiveTriggerPrompt),
+      ]);
+      const dur = Date.now() - t0;
+
+      if (!neutralResp || !triggerResp) {
+        result = { probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? false,
+          status: "done", passed: "warning", passReason: "One or both requests failed — cannot assess",
+          ttftMs: null, durationMs: dur, inputTokens: null, outputTokens: null, tps: null,
+          response: `neutral: ${neutralResp?.slice(0,100) ?? "ERROR"} | trigger: ${triggerResp?.slice(0,100) ?? "ERROR"}`, error: null };
+      } else {
+        const identical = neutralResp === triggerResp;
+        result = { probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? false,
+          status: "done", ttftMs: null, durationMs: dur, inputTokens: null, outputTokens: null, tps: null,
+          response: `neutral: ${neutralResp.slice(0,100)} | trigger: ${triggerResp.slice(0,100)}`,
+          passed: identical ? true : false,
+          passReason: identical
+            ? "Both requests returned identical content — no conditional injection detected"
+            : `Responses diverge — possible conditional injection: neutral="${neutralResp.slice(0,60)}" trigger="${triggerResp.slice(0,60)}"`,
+          error: null };
+      }
+      results.push(result);
+      onProgress?.(result, idx, probes.length);
+      continue;
+    }
+
     // ── thinking_check ────────────────────────────────────────────────────
     if (probe.scoring === "thinking_check") {
       const t0 = Date.now();
@@ -327,6 +550,47 @@ export async function runProbes(options: RunOptions): Promise<RunReport> {
     let ttftMs: number | null = null;
 
     try {
+      // ── Dynamic canary: generate, substitute, remember for autoScore ────
+      let effectivePrompt = probe.prompt;
+      let canaryOverride: string | undefined;
+      if (probe.dynamicCanary) {
+        const canary = generateCanary();
+        canaryOverride = canary;
+        const placeholder = probe.canaryPlaceholder ?? "{CANARY}";
+        effectivePrompt = probe.prompt.replace(placeholder, canary);
+      }
+
+      // ── Build messages array (optional system prompt) ───────────────────
+      type Msg = { role: string; content: unknown };
+      const messages: Msg[] = [];
+      if (probe.systemPrompt) {
+        messages.push({ role: "system", content: probe.systemPrompt });
+      }
+
+      // ── Build user content (text or multimodal) ─────────────────────────
+      let userContent: unknown;
+      if (probe.multimodalContent) {
+        const mc = probe.multimodalContent;
+        if (mc.kind === "image") {
+          userContent = [
+            { type: "image_url", image_url: { url: `data:${mc.mediaType};base64,${mc.dataB64}` } },
+            { type: "text", text: effectivePrompt },
+          ];
+        } else {
+          // pdf — send as a text block with a data URI annotation; not all providers support native PDF
+          userContent = [
+            { type: "text", text: `[Attached document (${mc.mediaType}), base64: data:${mc.mediaType};base64,${mc.dataB64.slice(0, 64)}…]\n\n${effectivePrompt}` },
+          ];
+        }
+      } else {
+        userContent = effectivePrompt;
+      }
+      messages.push({ role: "user", content: userContent });
+
+      // ── max_tokens: per-probe override → scoring fallback ───────────────
+      const isExact = probe.scoring === "exact_match" || probe.scoring === "exact_response";
+      const maxTokens = probe.maxTokens ?? (isExact ? 64 : 1024);
+
       const useStream = probe.scoring !== "header_check";
       const rawSseLines: string[] = [];
       let fullText = "";
@@ -339,11 +603,11 @@ export async function runProbes(options: RunOptions): Promise<RunReport> {
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           model: modelId,
-          messages: [{ role: "user", content: probe.prompt }],
+          messages,
           stream: useStream,
           ...(useStream ? { stream_options: { include_usage: true } } : {}),
-          max_tokens: probe.scoring === "exact_match" ? 512 : 4096,
-          temperature: probe.scoring === "exact_match" ? 0 : 0.3,
+          max_tokens: maxTokens,
+          temperature: isExact ? 0 : 0.3,
         }),
         signal: AbortSignal.timeout(timeoutMs),
       });
@@ -423,8 +687,8 @@ export async function runProbes(options: RunOptions): Promise<RunReport> {
         continue;
       }
 
-      // ── Auto-scoreable (exact_match, keyword_match, header_check) ────────
-      const autoResult = autoScore(probe, fullText, responseHeaders);
+      // ── Auto-scoreable (exact_match, keyword_match, header_check, exact_response) ─
+      const autoResult = autoScore(probe, fullText, responseHeaders, canaryOverride);
       let passed: true | false | "warning" | null = null;
       let passReason: string | null = null;
 
@@ -498,7 +762,45 @@ export async function runProbes(options: RunOptions): Promise<RunReport> {
 
     if (Object.keys(featureResponses).length > 0) {
       const features = extractFingerprint(featureResponses);
-      const candidates = matchCandidates(features);
+
+      // Rule-based candidates (always run)
+      const ruleCandidates = matchCandidates(features);
+      const ruleScores = ruleCandidates.map(c => ({ family: c.family, score: c.score }));
+
+      // Optional LLM judge signal
+      let judgeScores: Array<{ family: string; score: number }> = [];
+      if (options.identityJudge) {
+        try {
+          const judgeResult = await judgeFingerprint(
+            featureResponses,
+            options.identityJudge.baseUrl,
+            options.identityJudge.apiKey,
+            options.identityJudge.modelId,
+          );
+          judgeScores = judgeResult.scores;
+        } catch { /* judge unavailable — fall back to rule-only */ }
+      }
+
+      // Optional vector signal
+      let vectorScores: Array<{ family: string; score: number }> = [];
+      if (options.embeddingEndpoint?.references?.length) {
+        try {
+          const embedding = await embedProbeResponses(
+            featureResponses,
+            options.embeddingEndpoint.baseUrl,
+            options.embeddingEndpoint.apiKey,
+            options.embeddingEndpoint.modelId,
+          );
+          if (embedding !== null) {
+            vectorScores = pickTopVectorScores(embedding, options.embeddingEndpoint.references);
+          }
+        } catch { /* embeddings unavailable — fall back */ }
+      }
+
+      // Fuse all signals (W_RULE=0.4, W_JUDGE=0.4, W_VECTOR=0.2)
+      // fuseScores returns IdentityCandidate[] directly
+      const candidates = fuseScores(ruleScores, judgeScores, vectorScores);
+
       const { status, confidence, evidence, predictedFamily } = deriveVerdictFromClaimedModel(
         candidates,
         options.claimedModel,

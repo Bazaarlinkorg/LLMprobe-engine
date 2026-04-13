@@ -1,3 +1,4 @@
+import { type ReferenceEmbedding } from "./fingerprint-vectors.js";
 import type { IdentityAssessment } from "./identity-report.js";
 export interface ProbeResult {
     probeId: string;
@@ -63,6 +64,26 @@ export interface RunOptions {
      * When provided, the identity phase compares observed behavior against this family.
      */
     claimedModel?: string;
+    /**
+     * Judge endpoint for identity fingerprinting (optional LLM judge signal).
+     * When supplied, the identity phase calls this judge to classify model family.
+     */
+    identityJudge?: {
+        baseUrl: string;
+        apiKey: string;
+        modelId: string;
+    };
+    /**
+     * Embeddings endpoint for identity fingerprinting (optional vector signal).
+     * When supplied, probe responses are embedded and compared against family references.
+     */
+    embeddingEndpoint?: {
+        baseUrl: string;
+        apiKey: string;
+        modelId: string;
+        /** Reference embeddings (family → embedding vector). If absent, vector signal is skipped. */
+        references?: ReferenceEmbedding[];
+    };
 }
 export declare function runProbes(options: RunOptions): Promise<RunReport>;
 //# sourceMappingURL=runner.d.ts.map

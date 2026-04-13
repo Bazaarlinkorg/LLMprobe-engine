@@ -330,10 +330,266 @@ console.log(`Score: ${report.score}/100`);
 
 ---
 
+## `proxy-watch` — 本地透明 Proxy 監控（AC-1.b 條件式注入偵測）
+
+啟動一個本地 HTTP proxy server，將你的 app 流量透明轉發到目標 API，同時在背景分析每一筆請求與回應，偵測是否存在「只有在含有敏感 credentials 時才注入惡意代碼」的條件式攻擊模式（AC-1.b）。
+
+### 工作原理
+
+```
+你的 App
+    ↓  baseURL 改成 http://localhost:8787/v1
+bazaarlink-probe proxy-watch  ← 在這裡記錄、分析
+    ↓  透明轉發
+可疑的第三方 API
+    ↑  回應
+bazaarlink-probe proxy-watch  ← 分析回應有無注入關鍵字
+    ↑  原封不動回傳
+你的 App（感覺不到任何差異）
+```
+
+### 快速使用
+
+```bash
+# 第一步：啟動 proxy-watch
+bazaarlink-probe proxy-watch \
+  --upstream https://openrouter.ai/api/v1 \
+  --port 8787 \
+  --log-file ./proxy-watch.ndjson
+
+# 第二步：將你的 app 的 baseURL 改成：
+# http://localhost:8787/v1
+# API Key 照用不變，只換 URL 這一行
+```
+
+終端機即時顯示每筆請求：
+
+```
+bazaarlink-probe proxy-watch — 本地透明 Proxy
+  Upstream  : https://openrouter.ai/api/v1
+  Listen    : http://localhost:8787/v1
+  Log file  : ./proxy-watch.ndjson
+  Point your app's base_url at: http://localhost:8787/v1
+──────────────────────────────────────────────────────────────
+  Time      Profile     Status     Model                           Duration
+  ────────────────────────────────────────────────────────────────────────────
+  14:23:01  neutral      ✓ clean   openai/gpt-4o                    842ms
+  14:23:15  sensitive    ✓ clean   openai/gpt-4o                    901ms
+  14:23:28  neutral      ✓ clean   openai/gpt-4o                    756ms
+  ...
+
+  AC-1.b [5 req]: insufficient_data
+           Need ≥3 neutral (have 3) and ≥3 sensitive (have 2) messages
+```
+
+Ctrl+C 停止後輸出最終 AC-1.b 判斷：
+
+```
+──────────────────────────────────────────────────────────────
+  proxy-watch stopped.
+
+  AC-1.b Assessment
+  Verdict   : no_conditional_injection
+  Reason    : Rates similar: sensitive 20% vs neutral 0%
+  Neutral   : 8 requests, 0 anomalies
+  Sensitive : 5 requests, 1 anomalies
+  Total     : 13 requests logged
+  Log file  : ./proxy-watch.ndjson
+──────────────────────────────────────────────────────────────
+```
+
+### 完整參數
+
+```
+bazaarlink-probe proxy-watch [options]
+
+必填：
+  --upstream <url>         上游 API 的 Base URL（e.g. https://openrouter.ai/api/v1）
+
+選填：
+  --port <n>               本地監聽 port（預設：8787）
+  --log-file <path>        NDJSON 記錄檔路徑（預設：./proxy-watch.ndjson）
+                           重啟後自動繼續累積，不覆蓋
+  --report-file <path>     停止時寫出 JSON 摘要報告（含 AC-1.b 結果 + 最後 20 筆 log）
+  --alert-on-suspected     若 AC-1.b 判定為 suspected，以 exit code 2 退出
+                           （可接 CI/PagerDuty/alerting 系統）
+```
+
+### 記錄格式（NDJSON）
+
+每筆請求一行 JSON，可以用 `jq` 分析：
+
+```bash
+# 查看所有 sensitive 且有異常的請求
+jq 'select(.profile == "sensitive" and .anomaly == true)' proxy-watch.ndjson
+
+# 統計 anomaly 比例
+jq -s '[.[] | .anomaly] | {total: length, anomalies: map(select(. == true)) | length}' proxy-watch.ndjson
+```
+
+記錄欄位：
+```json
+{
+  "id": "plg_1713890400000_abc",
+  "ts": "2026-04-12T14:23:01.000Z",
+  "model": "openai/gpt-4o",
+  "userContent": "What is recursion?",
+  "assistantContent": "Recursion is...",
+  "profile": "neutral",
+  "anomaly": false,
+  "injectionKeywordsFound": [],
+  "inputTokens": 12,
+  "outputTokens": 156,
+  "durationMs": 842,
+  "statusCode": 200,
+  "error": null
+}
+```
+
+### AC-1.b 判定邏輯
+
+| 情況 | 判定 |
+|------|------|
+| neutral 或 sensitive 筆數 < 3 | `insufficient_data` |
+| sensitive 異常率 ≥ neutral 異常率的 2 倍，且 sensitive 至少 1 筆異常 | `conditional_injection_suspected` 🔴 |
+| 其他 | `no_conditional_injection` ✅ |
+
+**AC-1.b 偵測的是什麼**：正常 API 對所有請求的行為應一致。如果 API 只有在偵測到使用者含有 `aws`、`api_key`、`token`、`secret` 等關鍵字時才在回應中注入 `exec()`、`curl`、`subprocess` 等惡意代碼，就是條件式注入攻擊。
+
+---
+
+## `monitor` — 定期主動探針監控
+
+定期對端點執行完整的 27 項探針套件，追蹤分數變化，分數掉到閾值以下時 alert。
+
+```bash
+# 每 5 分鐘測一次，分數低於 70 就 alert
+bazaarlink-probe monitor \
+  --base-url https://openrouter.ai/api/v1 \
+  --api-key <你的API金鑰> \
+  --model openai/gpt-4o \
+  --interval 300 \
+  --alert-below 70 \
+  --history-file ./monitor-history.jsonl
+```
+
+終端機即時顯示每次 run：
+
+```
+bazaarlink-probe monitor — 定期監控
+  Endpoint  : https://openrouter.ai/api/v1
+  Model     : openai/gpt-4o
+  Interval  : 300s
+  Alert if  : score < 70
+──────────────────────────────────────────
+  #    Time       Score     Δ    P   W   F  Duration
+  ────────────────────────────────────────────────────
+  1    14:00:00      85    --   18   1   0  42.3s
+  2    14:05:00      85    +0   18   1   0  39.8s
+  3    14:10:00      72   -13   15   1   3  44.1s
+
+[ALERT] Score 72 dropped below threshold 70 at 2026-04-12T14:10:44Z
+```
+
+### 完整參數
+
+```
+bazaarlink-probe monitor [options]
+
+必填：
+  --base-url <url>         端點 Base URL
+  --api-key <key>          API 金鑰
+  --model <id>             模型 ID
+
+選填：
+  --interval <seconds>     每次 run 的間隔秒數（預設：300）
+  --runs <n>               執行幾次後停止（預設：0 = 無限）
+  --alert-below <score>    分數低於此值時輸出 ALERT（預設：60）
+                           搭配 --alert-on-suspected 可接 exit code 2
+  --timeout <ms>           每個探針逾時時間（預設：180000）
+  --history-file <path>    每次 run 的摘要追加到此 JSONL 檔
+  --baseline <file>        本地 baseline 檔（啟用 llm_judge 探針）
+  --judge-base-url <url>
+  --judge-api-key <key>
+  --judge-model <id>
+  --judge-threshold <n>    判斷閾值 1-10（預設：7）
+  --claimed-model <model>  廠商宣稱的模型名稱（用於身份驗證對比）
+```
+
+### `proxy-watch` vs `monitor` 選哪個？
+
+| | `proxy-watch`（被動監控）| `monitor`（主動探針）|
+|---|---|---|
+| **工作方式** | 在真實流量上攔截分析 | 主動發送 27 個測試請求 |
+| **需要換 URL？** | ✅ 換一行 baseURL | ❌ 不用動 app 代碼 |
+| **偵測能力** | 條件式注入（AC-1.b） | 品質下降、安全回退、模型置換 |
+| **適合** | 懷疑第三方 proxy 有惡意行為 | 自己的 infra 定期 SLA 驗證 |
+
+---
+
 ## 結束碼
 
-- `0` — 分數 ≥ 50
-- `1` — 分數 < 50
+- `0` — `run`/`monitor`: 分數 ≥ 50；`proxy-watch`: 正常停止
+- `1` — `run`/`monitor`: 分數 < 50
+- `2` — `proxy-watch --alert-on-suspected`: 偵測到條件式注入
+
+---
+
+## 開發與測試
+
+### 環境準備
+
+```bash
+git clone https://github.com/Bazaarlinkorg/LLMprobe-engine
+cd LLMprobe-engine
+npm install
+npm run build   # 編譯 TypeScript → dist/
+```
+
+### 執行測試
+
+```bash
+npm test                        # 執行全部 143 個測試（約 1 秒）
+npm test -- --reporter=verbose  # 顯示每個測試的名稱與耗時
+npm test -- --watch             # 監聽模式，存檔自動重跑
+```
+
+測試結果範例：
+
+```
+ Test Files  10 passed (10)
+      Tests  143 passed (143)
+   Duration  ~800ms
+```
+
+### 測試涵蓋範圍（10 個測試檔，143 個測試）
+
+| 測試檔 | 測試數 | 涵蓋模組 | 主要驗證項目 |
+|---|---|---|---|
+| `probe-suite.test.ts` | 34 | `probe-suite.ts` | 探針陣列結構驗證、所有評分模式（exact_match / keyword_match / header_check / llm_judge）邏輯、neutral 標記、optional 標記 |
+| `proxy-analyzer.test.ts` | 27 | `proxy-analyzer.ts` | `profileRequest` sensitive/neutral 分類、`analyzeResponse` 注入關鍵字偵測（exec/eval/subprocess/curl 等）、AC-1.b 判定邏輯三種 verdict、`statsFromLogs` 統計計算 |
+| `probe-preflight.test.ts` | 18 | `probe-preflight.ts` | HTTP 200–299 正常、401/403 中止、model_not_found 中止、429/5xx 警告、空 body / 非 JSON 邊界處理 |
+| `probe-suite.test.ts` autoScore | (含於上) | — | 見上方 |
+| `probe-score.test.ts` | 13 | `probe-score.ts` | 滿分/零分計算、warning 計 0.5 分、neutral 不計入分母、null 雙向影響、error/skipped 計分、混合情境 |
+| `proxy-log-store.test.ts` | 11 | `proxy-log-store.ts` | NDJSON 讀寫、多筆 append、readLast(n)、跨實例持久化、畸形行跳過不拋錯、makeLogId 唯一性 |
+| `sse-compliance.test.ts` | 11 | `sse-compliance.ts` | 格式正確的 SSE stream、缺少 [DONE]、空 stream、非 JSON chunk 偵測、無 choices 警告、失敗時不誤報警告 |
+| `token-inflation.test.ts` | 10 | `token-inflation.ts` | prompt_tokens 閾值邊界、自訂閾值、inflation 金額回報、零分母邊界 |
+| `context-check.test.ts` | 6 | `context-check.ts` | 所有層級通過、最小層級失敗、中段截斷警告、send 函式丟出例外 |
+| `fingerprint-extractor.test.ts` | 7 | `fingerprint-extractor.ts` | Claude/GPT/Qwen 自我宣稱偵測、JSON 污染偵測、詞彙風格特徵、空輸入零訊號 |
+| `candidate-matcher.test.ts` | 6 | `candidate-matcher.ts` | Anthropic/OpenAI 家族排序、最多回傳 3 候選、match/mismatch/uncertain verdict 推導 |
+
+### 新增測試
+
+測試檔放在 `src/__tests__/`，vitest 會自動掃描 `*.test.ts`：
+
+```bash
+# 建立新測試
+touch src/__tests__/my-module.test.ts
+# 然後直接執行
+npm test
+```
+
+> `vitest.config.ts` 已設定排除 `dist/` 下的編譯產物，不會誤跑舊的 JS 版本。
 
 ---
 

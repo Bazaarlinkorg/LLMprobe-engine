@@ -328,12 +328,174 @@ console.log(`Score: ${report.score}/100`);
 }
 ```
 
+## `proxy-watch` — 本地透明 Proxy 监控（AC-1.b 条件式注入检测）
+
+启动一个本地 HTTP proxy server，将你的 app 流量透明转发到目标 API，同时在后台分析每一笔请求与响应，检测是否存在「只有在含有敏感 credentials 时才注入恶意代码」的条件式攻击模式（AC-1.b）。
+
+### 工作原理
+
+```
+你的 App
+    ↓  baseURL 改成 http://localhost:8787/v1
+bazaarlink-probe proxy-watch  ← 在这里记录、分析
+    ↓  透明转发
+可疑的第三方 API
+    ↑  响应
+bazaarlink-probe proxy-watch  ← 分析响应有无注入关键字
+    ↑  原封不动返回
+你的 App（感觉不到任何差异）
+```
+
+### 快速使用
+
+```bash
+# 第一步：启动 proxy-watch
+bazaarlink-probe proxy-watch \
+  --upstream https://openrouter.ai/api/v1 \
+  --port 8787 \
+  --log-file ./proxy-watch.ndjson
+
+# 第二步：将你的 app 的 baseURL 改成：
+# http://localhost:8787/v1
+# API Key 照用不变，只换 URL 这一行
+```
+
+Ctrl+C 停止后输出最终 AC-1.b 判断结果。
+
+### 完整参数
+
+```
+bazaarlink-probe proxy-watch [options]
+
+必填：
+  --upstream <url>         上游 API 的 Base URL
+
+选填：
+  --port <n>               本地监听 port（默认：8787）
+  --log-file <path>        NDJSON 记录文件路径（默认：./proxy-watch.ndjson）
+  --report-file <path>     停止时写出 JSON 摘要报告
+  --alert-on-suspected     若检测到条件式注入，以 exit code 2 退出
+```
+
+### AC-1.b 判定逻辑
+
+| 情况 | 判定 |
+|------|------|
+| neutral 或 sensitive 笔数 < 3 | `insufficient_data` |
+| sensitive 异常率 ≥ neutral 异常率的 2 倍，且 sensitive 至少 1 笔异常 | `conditional_injection_suspected` 🔴 |
+| 其他 | `no_conditional_injection` ✅ |
+
+---
+
+## `monitor` — 定期主动探针监控
+
+定期对端点执行完整的 27 项探针套件，追踪分数变化，分数掉到阈值以下时 alert。
+
+```bash
+bazaarlink-probe monitor \
+  --base-url https://openrouter.ai/api/v1 \
+  --api-key <你的API密钥> \
+  --model openai/gpt-4o \
+  --interval 300 \
+  --alert-below 70 \
+  --history-file ./monitor-history.jsonl
+```
+
+### 完整参数
+
+```
+bazaarlink-probe monitor [options]
+
+必填：
+  --base-url <url>         端点 Base URL
+  --api-key <key>          API 密钥
+  --model <id>             模型 ID
+
+选填：
+  --interval <seconds>     每次 run 的间隔秒数（默认：300）
+  --runs <n>               执行几次后停止（默认：0 = 无限）
+  --alert-below <score>    分数低于此值时输出 ALERT（默认：60）
+  --timeout <ms>           每个探针超时时间（默认：180000）
+  --history-file <path>    每次 run 的摘要追加到此 JSONL 文件
+  --baseline <file>        本地 baseline 文件（启用 llm_judge 探针）
+  --judge-base-url <url>
+  --judge-api-key <key>
+  --judge-model <id>
+  --judge-threshold <n>    判断阈值 1-10（默认：7）
+  --claimed-model <model>  厂商宣称的模型名称（用于身份验证对比）
+```
+
+### `proxy-watch` vs `monitor` 选哪个？
+
+| | `proxy-watch`（被动监控）| `monitor`（主动探针）|
+|---|---|---|
+| **工作方式** | 在真实流量上拦截分析 | 主动发送 27 个测试请求 |
+| **需要换 URL？** | ✅ 换一行 baseURL | ❌ 不用动 app 代码 |
+| **检测能力** | 条件式注入（AC-1.b） | 品质下降、安全回退、模型置换 |
+| **适合** | 怀疑第三方 proxy 有恶意行为 | 自己的 infra 定期 SLA 验证 |
+
 ---
 
 ## 退出码
 
-- `0` — 分数 ≥ 50
-- `1` — 分数 < 50
+- `0` — `run`/`monitor`: 分数 ≥ 50；`proxy-watch`: 正常停止
+- `1` — `run`/`monitor`: 分数 < 50
+- `2` — `proxy-watch --alert-on-suspected`: 检测到条件式注入
+
+---
+
+## 开发与测试
+
+### 环境准备
+
+```bash
+git clone https://github.com/Bazaarlinkorg/LLMprobe-engine
+cd LLMprobe-engine
+npm install
+npm run build   # 编译 TypeScript → dist/
+```
+
+### 执行测试
+
+```bash
+npm test                        # 执行全部 143 个测试（约 1 秒）
+npm test -- --reporter=verbose  # 显示每个测试的名称与耗时
+npm test -- --watch             # 监听模式，保存文件自动重跑
+```
+
+测试结果示例：
+
+```
+ Test Files  10 passed (10)
+      Tests  143 passed (143)
+   Duration  ~800ms
+```
+
+### 测试覆盖范围（10 个测试文件，143 个测试）
+
+| 测试文件 | 测试数 | 覆盖模块 | 主要验证项目 |
+|---|---|---|---|
+| `probe-suite.test.ts` | 34 | `probe-suite.ts` | 探针数组结构验证、所有评分模式（exact_match / keyword_match / header_check / llm_judge）逻辑、neutral 标记、optional 标记 |
+| `proxy-analyzer.test.ts` | 27 | `proxy-analyzer.ts` | `profileRequest` sensitive/neutral 分类、`analyzeResponse` 注入关键字检测（exec/eval/subprocess/curl 等）、AC-1.b 判定逻辑三种 verdict、`statsFromLogs` 统计计算 |
+| `probe-preflight.test.ts` | 18 | `probe-preflight.ts` | HTTP 200–299 正常、401/403 中止、model_not_found 中止、429/5xx 警告、空 body / 非 JSON 边界处理 |
+| `probe-score.test.ts` | 13 | `probe-score.ts` | 满分/零分计算、warning 计 0.5 分、neutral 不计入分母、null 双向影响、error/skipped 计分、混合场景 |
+| `proxy-log-store.test.ts` | 11 | `proxy-log-store.ts` | NDJSON 读写、多笔 append、readLast(n)、跨实例持久化、畸形行跳过不抛错、makeLogId 唯一性 |
+| `sse-compliance.test.ts` | 11 | `sse-compliance.ts` | 格式正确的 SSE stream、缺少 [DONE]、空 stream、非 JSON chunk 检测、无 choices 警告、失败时不误报警告 |
+| `token-inflation.test.ts` | 10 | `token-inflation.ts` | prompt_tokens 阈值边界、自定义阈值、inflation 金额回报、零分母边界 |
+| `context-check.test.ts` | 6 | `context-check.ts` | 所有层级通过、最小层级失败、中段截断警告、send 函数抛出异常 |
+| `fingerprint-extractor.test.ts` | 7 | `fingerprint-extractor.ts` | Claude/GPT/Qwen 自我声称检测、JSON 污染检测、词汇风格特征、空输入零信号 |
+| `candidate-matcher.test.ts` | 6 | `candidate-matcher.ts` | Anthropic/OpenAI 家族排序、最多返回 3 候选、match/mismatch/uncertain verdict 推导 |
+
+### 新增测试
+
+测试文件放在 `src/__tests__/`，vitest 会自动扫描 `*.test.ts`：
+
+```bash
+touch src/__tests__/my-module.test.ts
+npm test
+```
+
+> `vitest.config.ts` 已设置排除 `dist/` 下的编译产物，不会误跑旧的 JS 版本。
 
 ---
 

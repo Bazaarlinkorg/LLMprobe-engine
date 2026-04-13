@@ -11,6 +11,11 @@ const sse_compliance_js_1 = require("./sse-compliance.js");
 const context_check_js_1 = require("./context-check.js");
 const fingerprint_extractor_js_1 = require("./fingerprint-extractor.js");
 const candidate_matcher_js_1 = require("./candidate-matcher.js");
+const channel_signature_js_1 = require("./channel-signature.js");
+const signature_probe_js_1 = require("./signature-probe.js");
+const fingerprint_judge_js_1 = require("./fingerprint-judge.js");
+const fingerprint_vectors_js_1 = require("./fingerprint-vectors.js");
+const fingerprint_fusion_js_1 = require("./fingerprint-fusion.js");
 function parseJudgeScore(text) {
     const candidates = [];
     const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -121,6 +126,207 @@ async function runProbes(options) {
     for (const probe of probes) {
         idx++;
         let result;
+        // ── channel_signature ─────────────────────────────────────────────────
+        if (probe.scoring === "channel_signature") {
+            const t0 = Date.now();
+            try {
+                const r = await fetch(chatUrl, {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({ model: modelId, messages: [{ role: "user", content: probe.prompt }], stream: false, max_tokens: probe.maxTokens ?? 16 }),
+                    signal: AbortSignal.timeout(timeoutMs),
+                });
+                const dur = Date.now() - t0;
+                const bodyText = await r.text();
+                const responseHeaders = {};
+                r.headers.forEach((val, key) => { responseHeaders[key.toLowerCase()] = val; });
+                let messageId = null;
+                try {
+                    messageId = JSON.parse(bodyText).id ?? null;
+                }
+                catch { /* ok */ }
+                const sig = (0, channel_signature_js_1.classifyChannelSignature)({ headers: responseHeaders, messageId, rawBody: bodyText });
+                result = {
+                    probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? true,
+                    status: "done", passed: null, ttftMs: dur, durationMs: dur, inputTokens: null, outputTokens: null, tps: null,
+                    response: `channel=${sig.channel} confidence=${sig.confidence} evidence=[${sig.evidence.join(",")}]`,
+                    passReason: `Upstream channel: ${sig.channel} (confidence: ${(sig.confidence * 100).toFixed(0)}%)`,
+                    error: null,
+                };
+            }
+            catch (e) {
+                result = { probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? true,
+                    status: "error", passed: null, passReason: null, ttftMs: null, durationMs: null,
+                    inputTokens: null, outputTokens: null, tps: null, response: null, error: e.message?.slice(0, 300) ?? "Unknown" };
+            }
+            results.push(result);
+            onProgress?.(result, idx, probes.length);
+            continue;
+        }
+        // ── signature_verify (AC-5) ───────────────────────────────────────────
+        if (probe.scoring === "signature_verify") {
+            const t0 = Date.now();
+            try {
+                // Step 1: get thinking block from native endpoint
+                const nativeUrl = baseUrl.replace(/\/+$/, "") + "/v1/messages";
+                const headers1 = {
+                    "content-type": "application/json",
+                    "anthropic-version": "2023-06-01",
+                    "x-api-key": apiKey,
+                };
+                const resp1 = await fetch(nativeUrl, {
+                    method: "POST",
+                    headers: headers1,
+                    body: JSON.stringify({
+                        model: modelId,
+                        max_tokens: probe.maxTokens ?? 1024,
+                        thinking: { type: "enabled", budget_tokens: 1024 },
+                        messages: [{ role: "user", content: probe.prompt }],
+                    }),
+                    signal: AbortSignal.timeout(timeoutMs),
+                });
+                const body1 = await resp1.text();
+                const dur1 = Date.now() - t0;
+                if (resp1.status === 404 || resp1.status === 405) {
+                    result = { probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? false,
+                        status: "done", durationMs: dur1, passed: "warning",
+                        passReason: "Provider does not expose native /v1/messages endpoint — signature_verify skipped",
+                        response: body1.slice(0, 300), ttftMs: dur1, inputTokens: null, outputTokens: null, tps: null, error: null };
+                    results.push(result);
+                    onProgress?.(result, idx, probes.length);
+                    continue;
+                }
+                if (!resp1.ok) {
+                    result = { probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? false,
+                        status: "done", durationMs: dur1, passed: "warning",
+                        passReason: `HTTP ${resp1.status} from native endpoint`,
+                        response: body1.slice(0, 300), ttftMs: dur1, inputTokens: null, outputTokens: null, tps: null, error: null };
+                    results.push(result);
+                    onProgress?.(result, idx, probes.length);
+                    continue;
+                }
+                let parsed1;
+                try {
+                    parsed1 = JSON.parse(body1);
+                }
+                catch {
+                    result = { probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? false,
+                        status: "done", durationMs: dur1, passed: false,
+                        passReason: "Response is not valid JSON",
+                        response: body1.slice(0, 300), ttftMs: dur1, inputTokens: null, outputTokens: null, tps: null, error: null };
+                    results.push(result);
+                    onProgress?.(result, idx, probes.length);
+                    continue;
+                }
+                const thinkingBlock = (0, signature_probe_js_1.extractThinkingBlock)(parsed1);
+                if (!thinkingBlock) {
+                    result = { probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? false,
+                        status: "done", durationMs: dur1, passed: false,
+                        passReason: "No thinking block found — provider may not support extended thinking",
+                        response: body1.slice(0, 300), ttftMs: dur1, inputTokens: null, outputTokens: null, tps: null, error: null };
+                    results.push(result);
+                    onProgress?.(result, idx, probes.length);
+                    continue;
+                }
+                // Extract assistant text from first response
+                let assistantText = "";
+                const content1 = parsed1.content;
+                if (Array.isArray(content1)) {
+                    for (const b of content1) {
+                        if (b && typeof b === "object" && b.type === "text") {
+                            assistantText += b.text ?? "";
+                        }
+                    }
+                }
+                // Step 2: round-trip the thinking block
+                const verifyResult = await (0, signature_probe_js_1.verifySignatureRoundtrip)({
+                    endpoint: nativeUrl,
+                    apiKey,
+                    model: modelId,
+                    originalUserPrompt: probe.prompt,
+                    thinkingBlock,
+                    assistantText,
+                    followUpUserPrompt: "Is 7 a prime number? Answer yes or no.",
+                    signal: AbortSignal.timeout(60000),
+                });
+                const dur2 = Date.now() - t0;
+                result = {
+                    probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? false,
+                    status: "done", durationMs: dur2, ttftMs: dur2,
+                    inputTokens: null, outputTokens: null, tps: null,
+                    response: body1.slice(0, 500),
+                    passed: verifyResult.verified ? true : verifyResult.reason === "signature_rejected" ? false : "warning",
+                    passReason: verifyResult.verified
+                        ? "Signature round-trip accepted (HTTP 200) — genuine Anthropic upstream"
+                        : verifyResult.reason === "signature_rejected"
+                            ? `Signature rejected (HTTP 400) — tampered or synthetic thinking block`
+                            : `HTTP ${verifyResult.httpStatus}: ${verifyResult.rawErrorSnippet?.slice(0, 100) ?? "unknown"}`,
+                    error: null,
+                };
+            }
+            catch (e) {
+                result = { probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? false,
+                    status: "error", passed: null, passReason: null, ttftMs: null, durationMs: null,
+                    inputTokens: null, outputTokens: null, tps: null, response: null, error: e.message?.slice(0, 300) ?? "Unknown" };
+            }
+            results.push(result);
+            onProgress?.(result, idx, probes.length);
+            continue;
+        }
+        // ── adaptive_check (AC-1.b) ───────────────────────────────────────────
+        if (probe.scoring === "adaptive_check") {
+            if (!probe.adaptiveTriggerPrompt) {
+                result = { probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? false,
+                    status: "skipped", passed: null, passReason: "adaptiveTriggerPrompt not set", ttftMs: null, durationMs: null,
+                    inputTokens: null, outputTokens: null, tps: null, response: null, error: null };
+                results.push(result);
+                onProgress?.(result, idx, probes.length);
+                continue;
+            }
+            const t0 = Date.now();
+            const makeRequest = async (prompt) => {
+                try {
+                    const r = await fetch(chatUrl, {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+                        body: JSON.stringify({ model: modelId, messages: [{ role: "user", content: prompt }], stream: false, max_tokens: 256, temperature: 0 }),
+                        signal: AbortSignal.timeout(timeoutMs),
+                    });
+                    if (!r.ok)
+                        return null;
+                    const d = await r.json();
+                    return (d.choices?.[0]?.message?.content ?? "").trim();
+                }
+                catch {
+                    return null;
+                }
+            };
+            const [neutralResp, triggerResp] = await Promise.all([
+                makeRequest(probe.prompt),
+                makeRequest(probe.adaptiveTriggerPrompt),
+            ]);
+            const dur = Date.now() - t0;
+            if (!neutralResp || !triggerResp) {
+                result = { probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? false,
+                    status: "done", passed: "warning", passReason: "One or both requests failed — cannot assess",
+                    ttftMs: null, durationMs: dur, inputTokens: null, outputTokens: null, tps: null,
+                    response: `neutral: ${neutralResp?.slice(0, 100) ?? "ERROR"} | trigger: ${triggerResp?.slice(0, 100) ?? "ERROR"}`, error: null };
+            }
+            else {
+                const identical = neutralResp === triggerResp;
+                result = { probeId: probe.id, label: probe.label, group: probe.group, neutral: probe.neutral ?? false,
+                    status: "done", ttftMs: null, durationMs: dur, inputTokens: null, outputTokens: null, tps: null,
+                    response: `neutral: ${neutralResp.slice(0, 100)} | trigger: ${triggerResp.slice(0, 100)}`,
+                    passed: identical ? true : false,
+                    passReason: identical
+                        ? "Both requests returned identical content — no conditional injection detected"
+                        : `Responses diverge — possible conditional injection: neutral="${neutralResp.slice(0, 60)}" trigger="${triggerResp.slice(0, 60)}"`,
+                    error: null };
+            }
+            results.push(result);
+            onProgress?.(result, idx, probes.length);
+            continue;
+        }
         // ── thinking_check ────────────────────────────────────────────────────
         if (probe.scoring === "thinking_check") {
             const t0 = Date.now();
@@ -267,6 +473,43 @@ async function runProbes(options) {
         const startTime = Date.now();
         let ttftMs = null;
         try {
+            // ── Dynamic canary: generate, substitute, remember for autoScore ────
+            let effectivePrompt = probe.prompt;
+            let canaryOverride;
+            if (probe.dynamicCanary) {
+                const canary = (0, probe_suite_js_1.generateCanary)();
+                canaryOverride = canary;
+                const placeholder = probe.canaryPlaceholder ?? "{CANARY}";
+                effectivePrompt = probe.prompt.replace(placeholder, canary);
+            }
+            const messages = [];
+            if (probe.systemPrompt) {
+                messages.push({ role: "system", content: probe.systemPrompt });
+            }
+            // ── Build user content (text or multimodal) ─────────────────────────
+            let userContent;
+            if (probe.multimodalContent) {
+                const mc = probe.multimodalContent;
+                if (mc.kind === "image") {
+                    userContent = [
+                        { type: "image_url", image_url: { url: `data:${mc.mediaType};base64,${mc.dataB64}` } },
+                        { type: "text", text: effectivePrompt },
+                    ];
+                }
+                else {
+                    // pdf — send as a text block with a data URI annotation; not all providers support native PDF
+                    userContent = [
+                        { type: "text", text: `[Attached document (${mc.mediaType}), base64: data:${mc.mediaType};base64,${mc.dataB64.slice(0, 64)}…]\n\n${effectivePrompt}` },
+                    ];
+                }
+            }
+            else {
+                userContent = effectivePrompt;
+            }
+            messages.push({ role: "user", content: userContent });
+            // ── max_tokens: per-probe override → scoring fallback ───────────────
+            const isExact = probe.scoring === "exact_match" || probe.scoring === "exact_response";
+            const maxTokens = probe.maxTokens ?? (isExact ? 64 : 1024);
             const useStream = probe.scoring !== "header_check";
             const rawSseLines = [];
             let fullText = "";
@@ -278,11 +521,11 @@ async function runProbes(options) {
                 headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
                 body: JSON.stringify({
                     model: modelId,
-                    messages: [{ role: "user", content: probe.prompt }],
+                    messages,
                     stream: useStream,
                     ...(useStream ? { stream_options: { include_usage: true } } : {}),
-                    max_tokens: probe.scoring === "exact_match" ? 512 : 4096,
-                    temperature: probe.scoring === "exact_match" ? 0 : 0.3,
+                    max_tokens: maxTokens,
+                    temperature: isExact ? 0 : 0.3,
                 }),
                 signal: AbortSignal.timeout(timeoutMs),
             });
@@ -366,8 +609,8 @@ async function runProbes(options) {
                 onProgress?.(result, idx, probes.length);
                 continue;
             }
-            // ── Auto-scoreable (exact_match, keyword_match, header_check) ────────
-            const autoResult = (0, probe_suite_js_1.autoScore)(probe, fullText, responseHeaders);
+            // ── Auto-scoreable (exact_match, keyword_match, header_check, exact_response) ─
+            const autoResult = (0, probe_suite_js_1.autoScore)(probe, fullText, responseHeaders, canaryOverride);
             let passed = null;
             let passReason = null;
             if (autoResult) {
@@ -437,7 +680,32 @@ async function runProbes(options) {
         }
         if (Object.keys(featureResponses).length > 0) {
             const features = (0, fingerprint_extractor_js_1.extractFingerprint)(featureResponses);
-            const candidates = (0, candidate_matcher_js_1.matchCandidates)(features);
+            // Rule-based candidates (always run)
+            const ruleCandidates = (0, candidate_matcher_js_1.matchCandidates)(features);
+            const ruleScores = ruleCandidates.map(c => ({ family: c.family, score: c.score }));
+            // Optional LLM judge signal
+            let judgeScores = [];
+            if (options.identityJudge) {
+                try {
+                    const judgeResult = await (0, fingerprint_judge_js_1.judgeFingerprint)(featureResponses, options.identityJudge.baseUrl, options.identityJudge.apiKey, options.identityJudge.modelId);
+                    judgeScores = judgeResult.scores;
+                }
+                catch { /* judge unavailable — fall back to rule-only */ }
+            }
+            // Optional vector signal
+            let vectorScores = [];
+            if (options.embeddingEndpoint?.references?.length) {
+                try {
+                    const embedding = await (0, fingerprint_vectors_js_1.embedProbeResponses)(featureResponses, options.embeddingEndpoint.baseUrl, options.embeddingEndpoint.apiKey, options.embeddingEndpoint.modelId);
+                    if (embedding !== null) {
+                        vectorScores = (0, fingerprint_vectors_js_1.pickTopVectorScores)(embedding, options.embeddingEndpoint.references);
+                    }
+                }
+                catch { /* embeddings unavailable — fall back */ }
+            }
+            // Fuse all signals (W_RULE=0.4, W_JUDGE=0.4, W_VECTOR=0.2)
+            // fuseScores returns IdentityCandidate[] directly
+            const candidates = (0, fingerprint_fusion_js_1.fuseScores)(ruleScores, judgeScores, vectorScores);
             const { status, confidence, evidence, predictedFamily } = (0, candidate_matcher_js_1.deriveVerdictFromClaimedModel)(candidates, options.claimedModel);
             const adjustedConfidence = riskFlags.length > 0
                 ? Math.max(0, confidence - 0.15 * Math.min(riskFlags.length, 3))

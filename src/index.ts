@@ -3,7 +3,7 @@
 export { runProbes } from "./runner.js";
 export type { RunOptions, RunReport, ProbeResult, BaselineMap } from "./runner.js";
 
-export { PROBE_SUITE, autoScore } from "./probe-suite.js";
+export { PROBE_SUITE, autoScore, generateCanary } from "./probe-suite.js";
 export type { ProbeDefinition, ProbeGroup, ScoringMode } from "./probe-suite.js";
 
 export { computeProbeScore } from "./probe-score.js";
@@ -26,3 +26,18 @@ export type { FingerprintFeatureSet, IdentityAssessment, IdentityCandidate, Iden
 export { matchCandidates, deriveVerdict, deriveVerdictFromClaimedModel } from "./candidate-matcher.js";
 export { FAMILY_BASELINES, claimedModelToFamily } from "./fingerprint-baseline.js";
 export type { FamilyBaseline } from "./fingerprint-baseline.js";
+
+// ── New v0.3.0 modules ────────────────────────────────────────────────────
+export { classifyChannelSignature } from "./channel-signature.js";
+export type { ChannelLabel, ChannelSignature, ChannelSignatureInput } from "./channel-signature.js";
+
+export { extractThinkingBlock, verifySignatureRoundtrip } from "./signature-probe.js";
+export type { AnthropicThinkingBlock, VerifyArgs, VerifyResult } from "./signature-probe.js";
+
+export { judgeFingerprint } from "./fingerprint-judge.js";
+export type { JudgeIdentityResult } from "./fingerprint-judge.js";
+
+export { cosineSimilarity, embedProbeResponses, pickTopVectorScores } from "./fingerprint-vectors.js";
+export type { ReferenceEmbedding } from "./fingerprint-vectors.js";
+
+export { fuseScores } from "./fingerprint-fusion.js";

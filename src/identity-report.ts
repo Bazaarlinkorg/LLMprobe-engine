@@ -2,6 +2,12 @@
 
 export type IdentityStatus = "match" | "mismatch" | "uncertain";
 
+/** Family-level score used by fusion, judge, and vector modules. */
+export interface FamilyScore {
+  family: string;
+  score: number;   // 0.0–1.0
+}
+
 export interface IdentityCandidate {
   model: string;        // e.g. "Anthropic / Claude" or "OpenAI / GPT"
   family: string;       // e.g. "anthropic", "openai", "qwen"

@@ -38,7 +38,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const commander_1 = require("commander");
 const runner_js_1 = require("./runner.js");
 const probe_suite_js_1 = require("./probe-suite.js");
+const proxy_server_js_1 = require("./proxy-server.js");
+const proxy_log_store_js_1 = require("./proxy-log-store.js");
+const proxy_analyzer_js_1 = require("./proxy-analyzer.js");
 const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
 const PASS_ICON = "✓";
 const WARN_ICON = "⚠";
 const FAIL_ICON = "✗";
@@ -322,6 +326,307 @@ program
         console.error(`  Saved to  ${opts.output}\n`);
     }
     process.exit(collected.length === 0 ? 1 : 0);
+});
+// ── proxy-watch command ───────────────────────────────────────────────────────
+program
+    .command("proxy-watch")
+    .description("Start a local transparent proxy that logs & analyzes every request for AC-1.b conditional injection")
+    .requiredOption("--upstream <url>", "Upstream API base URL to proxy (e.g. https://openrouter.ai/api/v1)")
+    .option("--port <n>", "Local port to listen on (default: 8787)", "8787")
+    .option("--log-file <path>", "Path to NDJSON log file (default: ./proxy-watch.ndjson)", "./proxy-watch.ndjson")
+    .option("--report-file <path>", "Write a final summary report to this file on exit (optional)")
+    .option("--alert-on-suspected", "Print a prominent ALERT and exit code 2 if AC-1.b detects conditional injection", false)
+    .action((opts) => {
+    const port = parseInt(opts.port, 10) || 8787;
+    const logFile = path.resolve(opts.logFile);
+    const isTTY = process.stderr.isTTY;
+    const logStore = new proxy_log_store_js_1.ProxyLogStore(logFile);
+    const prevCount = logStore.entryCount;
+    if (prevCount > 0) {
+        console.error(`  Log file  : ${logFile} (resuming, ${prevCount} existing entries)`);
+    }
+    function colorVerdict(verdict) {
+        if (!isTTY)
+            return verdict;
+        if (verdict === "conditional_injection_suspected")
+            return `\x1b[31;1m${verdict}\x1b[0m`;
+        if (verdict === "no_conditional_injection")
+            return `\x1b[32m${verdict}\x1b[0m`;
+        return `\x1b[90m${verdict}\x1b[0m`;
+    }
+    function printEntry(entry, stats) {
+        const ts = new Date(entry.ts).toTimeString().slice(0, 8);
+        const profile = entry.profile === "sensitive"
+            ? (isTTY ? `\x1b[33msensitive\x1b[0m` : "sensitive")
+            : "neutral  ";
+        const anomaly = entry.anomaly
+            ? (isTTY ? `\x1b[31m⚠ anomaly\x1b[0m` : "⚠ anomaly")
+            : "✓ clean  ";
+        const model = entry.model.slice(0, 30).padEnd(30);
+        const dur = `${entry.durationMs}ms`.padStart(7);
+        console.error(`  ${ts}  ${profile}  ${anomaly}  ${model}  ${dur}`);
+        if (entry.anomaly && entry.injectionKeywordsFound.length > 0) {
+            console.error(`           ↳ keywords: ${entry.injectionKeywordsFound.slice(0, 5).join(", ")}`);
+        }
+        // Print AC-1.b status every 5 requests
+        if (stats.total > 0 && stats.total % 5 === 0) {
+            const allLogs = logStore.readAll();
+            const ac1bStats = (0, proxy_analyzer_js_1.statsFromLogs)(allLogs);
+            const { verdict, reason } = (0, proxy_analyzer_js_1.computeAc1b)(ac1bStats);
+            console.error(`\n  AC-1.b [${stats.total} req]: ${colorVerdict(verdict)}`);
+            console.error(`           ${reason}\n`);
+        }
+    }
+    console.error(`\nBazaarLink Probe Engine — proxy-watch`);
+    console.error(`  Upstream  : ${opts.upstream}`);
+    console.error(`  Listen    : http://localhost:${port}/v1`);
+    console.error(`  Log file  : ${logFile}`);
+    if (opts.reportFile)
+        console.error(`  Report    : ${opts.reportFile}`);
+    console.error(`${"─".repeat(60)}`);
+    console.error(`  Point your app's base_url at: http://localhost:${port}/v1`);
+    console.error(`  Your API key passes through unchanged.`);
+    console.error(`  Ctrl+C to stop and see final AC-1.b summary.\n`);
+    console.error(`  Time      Profile     Status     Model                           Duration`);
+    console.error(`  ${"─".repeat(72)}`);
+    const server = (0, proxy_server_js_1.createProxyServer)({
+        port,
+        upstreamBaseUrl: opts.upstream,
+        logStore,
+        onEntry: printEntry,
+    });
+    server.on("error", (err) => {
+        if (err.code === "EADDRINUSE") {
+            console.error(`\nError: Port ${port} is already in use. Try --port <other-port>\n`);
+            process.exit(1);
+        }
+        throw err;
+    });
+    // Graceful shutdown: print final report on SIGINT
+    let shuttingDown = false;
+    function shutdown() {
+        if (shuttingDown)
+            return;
+        shuttingDown = true;
+        console.error(`\n${"─".repeat(60)}`);
+        console.error(`  proxy-watch stopped.\n`);
+        const allLogs = logStore.readAll();
+        const sessionLogs = allLogs;
+        const ac1bStats = (0, proxy_analyzer_js_1.statsFromLogs)(sessionLogs);
+        const { verdict, reason } = (0, proxy_analyzer_js_1.computeAc1b)(ac1bStats);
+        console.error(`  AC-1.b Assessment`);
+        console.error(`  Verdict   : ${colorVerdict(verdict)}`);
+        console.error(`  Reason    : ${reason}`);
+        console.error(`  Neutral   : ${ac1bStats.neutralCount} requests, ${ac1bStats.neutralAnomalies} anomalies`);
+        console.error(`  Sensitive : ${ac1bStats.sensitiveCount} requests, ${ac1bStats.sensitiveAnomalies} anomalies`);
+        console.error(`  Total     : ${sessionLogs.length} requests logged`);
+        console.error(`  Log file  : ${logFile}`);
+        console.error(`${"─".repeat(60)}\n`);
+        // Write optional report file
+        if (opts.reportFile) {
+            const report = {
+                endedAt: new Date().toISOString(),
+                upstream: opts.upstream,
+                logFile,
+                totalRequests: sessionLogs.length,
+                ac1b: { verdict, reason, ...ac1bStats },
+                recentLogs: sessionLogs.slice(-20).map(e => ({
+                    ts: e.ts, model: e.model, profile: e.profile,
+                    anomaly: e.anomaly, keywords: e.injectionKeywordsFound,
+                    statusCode: e.statusCode, durationMs: e.durationMs,
+                })),
+            };
+            fs.writeFileSync(path.resolve(opts.reportFile), JSON.stringify(report, null, 2), "utf-8");
+            console.error(`  Report saved to ${opts.reportFile}\n`);
+        }
+        server.close(() => {
+            const exitCode = opts.alertOnSuspected && verdict === "conditional_injection_suspected" ? 2 : 0;
+            process.exit(exitCode);
+        });
+    }
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
+});
+program
+    .command("monitor")
+    .description("Repeatedly run the probe suite and track score over time")
+    .requiredOption("--base-url <url>", "Base URL of the OpenAI-compatible endpoint")
+    .requiredOption("--api-key <key>", "API key for the endpoint")
+    .requiredOption("--model <id>", "Model ID to test")
+    .option("--interval <seconds>", "Seconds between probe runs (default: 300)", "300")
+    .option("--runs <n>", "Stop after N runs (default: unlimited)", "0")
+    .option("--alert-below <score>", "Print ALERT and exit with code 2 if score drops below this (default: 60)", "60")
+    .option("--timeout <ms>", "Per-probe timeout in milliseconds (default: 180000)", "180000")
+    .option("--history-file <path>", "Append each run's summary as JSON lines to this file")
+    .option("--baseline <file>", "Path to baseline JSON file (enables llm_judge scoring)")
+    .option("--judge-base-url <url>", "Judge endpoint base URL")
+    .option("--judge-api-key <key>", "Judge endpoint API key")
+    .option("--judge-model <id>", "Judge model ID")
+    .option("--judge-threshold <n>", "Judge score threshold 1-10 (default: 7)", "7")
+    .option("--claimed-model <model>", "Model name the vendor claims — used for identity verification")
+    .action(async (opts) => {
+    const intervalMs = (parseInt(opts.interval, 10) || 300) * 1000;
+    const maxRuns = parseInt(opts.runs, 10) || 0;
+    const alertBelow = parseInt(opts.alertBelow, 10) ?? 60;
+    const timeoutMs = parseInt(opts.timeout, 10) || 180000;
+    const judgeThreshold = parseInt(opts.judgeThreshold, 10) || 7;
+    const isTTY = process.stdout.isTTY;
+    const judge = opts.judgeBaseUrl && opts.judgeApiKey && opts.judgeModel
+        ? { baseUrl: opts.judgeBaseUrl, apiKey: opts.judgeApiKey, modelId: opts.judgeModel, threshold: judgeThreshold }
+        : undefined;
+    // Load local baseline if provided
+    let baseline;
+    if (opts.baseline) {
+        try {
+            const raw = JSON.parse(fs.readFileSync(opts.baseline, "utf-8"));
+            if (raw.probes) {
+                baseline = Object.fromEntries(raw.probes.map(p => [p.probeId, p.responseText]));
+            }
+        }
+        catch (e) {
+            console.error(`  Error reading baseline: ${e.message}`);
+            process.exit(1);
+        }
+    }
+    console.error(`\nBazaarLink Probe Engine — monitor`);
+    console.error(`  Endpoint  : ${opts.baseUrl}`);
+    console.error(`  Model     : ${opts.model}`);
+    console.error(`  Interval  : ${opts.interval}s`);
+    if (maxRuns > 0)
+        console.error(`  Max runs  : ${maxRuns}`);
+    console.error(`  Alert if  : score < ${alertBelow}`);
+    if (opts.historyFile)
+        console.error(`  History   : ${opts.historyFile}`);
+    console.error(`${"─".repeat(60)}`);
+    const history = [];
+    let runCount = 0;
+    let lastAlertScore = Infinity;
+    // Column header
+    const padR = (s, n) => s.padEnd(n);
+    const padL = (s, n) => s.padStart(n);
+    console.error(`\n  ${"#".padEnd(4)} ${"Time".padEnd(8)} ${"Score".padStart(9)} ${"Δ".padStart(5)}  ${"P".padStart(3)} ${"W".padStart(3)} ${"F".padStart(3)}  Duration`);
+    console.error(`  ${"─".repeat(52)}`);
+    async function runOnce() {
+        runCount++;
+        const t0 = Date.now();
+        const report = await (0, runner_js_1.runProbes)({
+            baseUrl: opts.baseUrl,
+            apiKey: opts.apiKey,
+            modelId: opts.model,
+            timeoutMs,
+            judge,
+            baseline,
+            claimedModel: opts.claimedModel,
+        });
+        const elapsedMs = Date.now() - t0;
+        const now = new Date();
+        const timeStr = now.toTimeString().slice(0, 8);
+        const passed = report.results.filter(r => r.passed === true).length;
+        const warning = report.results.filter(r => r.passed === "warning").length;
+        const failed = report.results.filter(r => r.passed === false || r.status === "error").length;
+        const prev = history.length > 0 ? history[history.length - 1].score : null;
+        const delta = prev !== null ? report.score - prev : null;
+        const deltaStr = delta !== null
+            ? (delta > 0 ? `+${delta}` : String(delta))
+            : "  --";
+        // Score range display: "72" or "60-80"
+        const scoreDisp = report.score !== report.scoreMax
+            ? `${report.score}–${report.scoreMax}`
+            : String(report.score);
+        // Color coding for TTY
+        const scoreColor = isTTY
+            ? report.score >= alertBelow
+                ? `\x1b[32m${scoreDisp.padStart(9)}\x1b[0m`
+                : `\x1b[31m${scoreDisp.padStart(9)}\x1b[0m`
+            : scoreDisp.padStart(9);
+        const deltaColor = isTTY && delta !== null
+            ? delta > 0
+                ? `\x1b[32m${deltaStr.padStart(5)}\x1b[0m`
+                : delta < 0
+                    ? `\x1b[31m${deltaStr.padStart(5)}\x1b[0m`
+                    : deltaStr.padStart(5)
+            : deltaStr.padStart(5);
+        const durStr = `${(elapsedMs / 1000).toFixed(1)}s`;
+        console.error(`  ${String(runCount).padEnd(4)} ${timeStr} ${scoreColor} ${deltaColor}  ` +
+            `${String(passed).padStart(3)} ${String(warning).padStart(3)} ${String(failed).padStart(3)}  ${durStr}`);
+        // Identity verdict
+        if (report.identityAssessment) {
+            const ia = report.identityAssessment;
+            const statusIcon = ia.status === "match" ? PASS_ICON : ia.status === "mismatch" ? FAIL_ICON : "?";
+            console.error(`         Identity: ${statusIcon} ${ia.status} (${(ia.confidence * 100).toFixed(0)}% confidence)`);
+            if (ia.predictedFamily)
+                console.error(`         Detected: ${ia.predictedFamily}`);
+        }
+        const entry = { runAt: now.toISOString(), score: report.score, scoreMax: report.scoreMax, durationMs: elapsedMs };
+        history.push(entry);
+        // Append to history file if configured
+        if (opts.historyFile) {
+            const line = JSON.stringify({
+                ...entry,
+                modelId: report.modelId,
+                baseUrl: report.baseUrl,
+                passed, warning, failed,
+                totalProbes: report.results.length,
+            });
+            fs.appendFileSync(opts.historyFile, line + "\n", "utf-8");
+        }
+        // Alert check
+        if (report.score < alertBelow && report.score !== lastAlertScore) {
+            lastAlertScore = report.score;
+            const alertMsg = `[ALERT] Score ${report.score} dropped below threshold ${alertBelow} at ${now.toISOString()}`;
+            if (isTTY) {
+                console.error(`\n\x1b[31;1m${alertMsg}\x1b[0m\n`);
+            }
+            else {
+                console.error(`\n${alertMsg}\n`);
+            }
+        }
+        else if (report.score >= alertBelow) {
+            lastAlertScore = Infinity; // reset alert state
+        }
+    }
+    // Graceful exit on SIGINT (Ctrl+C)
+    let interrupted = false;
+    process.on("SIGINT", () => {
+        interrupted = true;
+    });
+    // First run immediately
+    await runOnce();
+    while (!interrupted && (maxRuns === 0 || runCount < maxRuns)) {
+        // Wait for interval, but check for interruption
+        await new Promise(resolve => {
+            let waited = 0;
+            const step = 200;
+            const timer = setInterval(() => {
+                waited += step;
+                if (interrupted || waited >= intervalMs) {
+                    clearInterval(timer);
+                    resolve();
+                }
+            }, step);
+        });
+        if (interrupted)
+            break;
+        await runOnce();
+    }
+    // Final summary
+    if (history.length > 0) {
+        const scores = history.map(h => h.score);
+        const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+        const min = Math.min(...scores);
+        const max = Math.max(...scores);
+        console.error(`\n${"─".repeat(60)}`);
+        console.error(`  Completed : ${history.length} run(s)`);
+        console.error(`  Score avg : ${avg} / 100`);
+        console.error(`  Score min : ${min} / 100`);
+        console.error(`  Score max : ${max} / 100`);
+        if (opts.historyFile)
+            console.error(`  History   : ${opts.historyFile}`);
+        console.error(`${"─".repeat(60)}\n`);
+    }
+    // Exit with code 2 if last run scored below alert threshold
+    const lastScore = history[history.length - 1]?.score ?? 100;
+    process.exit(lastScore < alertBelow ? 2 : 0);
 });
 program.parse();
 //# sourceMappingURL=cli.js.map
