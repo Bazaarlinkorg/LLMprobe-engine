@@ -595,10 +595,81 @@ bazaarlink-probe monitor [options]
 
 ---
 
-## 結束碼
+## `canary` — 10 題確定性快速健康檢查（無需 LLM Judge）
 
-- `0` — `run`/`monitor`: 分數 ≥ 50；`proxy-watch`: 正常停止
-- `1` — `run`/`monitor`: 分數 < 50
+無需 Judge 模型，10 題純數學/邏輯/格式/召回/代碼題，全部有固定正確答案，可在 **數秒內** 判斷端點是否健康。適合 CI/CD 或頻繁的輕量 ping。
+
+### 快速使用
+
+```bash
+bazaarlink-probe canary \
+  --base-url https://openrouter.ai/api/v1 \
+  --api-key <API 金鑰> \
+  --model openai/gpt-4o
+```
+
+輸出範例：
+
+```
+bazaarlink-probe canary — 10-item deterministic quality baseline
+  Endpoint : https://openrouter.ai/api/v1
+  Model    : openai/gpt-4o
+
+  ✓  math-mul      347 × 89 = ?              →  30883          (842ms)
+  ✓  math-pow      2 ^ 16 = ?                →  65536          (201ms)
+  ✓  math-mod      1000 mod 7 = ?            →  6              (188ms)
+  ✓  logic-syl     All A are B. All B are C… →  Yes            (312ms)
+  ✓  recall-cap    Capital of Australia?     →  Canberra        (234ms)
+  ✓  recall-sym    Chemical symbol for gold? →  Au             (198ms)
+  ✓  format-echo   Echo "BANANA" exactly     →  BANANA         (176ms)
+  ✓  format-json   Return {"ok":true}        →  {"ok":true}    (203ms)
+  ✓  code-rev      Python one-liner reverse  →  s[::-1]        (287ms)
+  ✓  recall-year   Moon landing year?        →  1969           (211ms)
+
+──────────────────────────────────────────────────
+  Verdict  : healthy
+  Score    : 10 / 10  (1.00)
+  Latency  : 285ms avg
+  Model    : openai/gpt-4o
+──────────────────────────────────────────────────
+```
+
+### 判定標準
+
+| Verdict | 條件 |
+|---|---|
+| `healthy` | 通過率 ≥ 80% |
+| `degraded` | 通過率 50–79% |
+| `failed` | 通過率 < 50% |
+| `error` | 呼叫失敗（網路/認證錯誤） |
+
+### 完整參數
+
+```
+bazaarlink-probe canary [options]
+
+必填：
+  --base-url <url>   OpenAI-compatible 端點 Base URL
+  --api-key <key>    API 金鑰
+  --model <id>       模型 ID
+
+選填：
+  --timeout <ms>     每題逾時時間（預設：60000）
+  --output <file>    將 JSON 報告寫入檔案（預設：輸出至 stdout）
+  --quiet            靜默模式，不輸出逐題進度
+```
+
+### 結束碼
+
+- `0` — healthy 或 degraded
+- `1` — failed 或 error
+
+---
+
+## 結束碼（全指令）
+
+- `0` — `run`/`monitor`: 分數 ≥ 50；`proxy-watch`: 正常停止；`canary`: healthy/degraded
+- `1` — `run`/`monitor`: 分數 < 50；`canary`: failed/error
 - `2` — `proxy-watch --alert-on-suspected`: 偵測到條件式注入
 
 ---
