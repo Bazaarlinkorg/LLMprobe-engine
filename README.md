@@ -3,7 +3,9 @@
 # @bazaarlink/probe-engine
 
 針對 OpenAI-compatible API 端點的開源 CLI 測試工具與 Node.js 函式庫。  
-執行品質、安全性、完整性探針，產出 0–100 評分報告。
+執行品質、安全性、完整性、身份識別探針，產出 0–100 評分報告。
+
+> **v0.3.0**：新增 50 個探針（↑ 供應鏈攻擊 AC-1.a/AC-2、簽章驗證 AC-5、多模態、通道簽名偵測、三維融合身份識別）
 
 ---
 
@@ -79,8 +81,8 @@ BazaarLink Probe Engine
   [19/19] ✓ 回應一致性           2.3s  Responses differ — confirms independent generation
 
 ────────────────────────────────────────────────────────────
-  Score     : 100 / 100
-  Results   : 18 passed  1 warning  0 failed  (19 total)
+  Score     : 92 / 100
+  Results   : 44 passed  3 warning  3 failed  (50 total)
 ────────────────────────────────────────────────────────────
 ```
 
@@ -206,7 +208,7 @@ bazaarlink-probe run \
 
 ## 探針清單
 
-### Quality（品質）
+### Quality（品質）— 10 個探針
 
 | ID | 評分方式 | 說明 |
 |---|---|---|
@@ -219,8 +221,11 @@ bazaarlink-probe run \
 | censorship | keyword_match | 審查偵測（台灣政治問題） |
 | json_output | exact_match | 純 JSON 輸出 |
 | prompt_injection | keyword_match | 提示注入抵抗 *(neutral)* |
+| prompt_injection_hard | exact_response | 強化提示注入測試（系統提示輔助） |
 
-### Security（安全性）
+### Security（安全性）— 19 個探針
+
+#### 基礎探針
 
 | ID | 評分方式 | 說明 |
 |---|---|---|
@@ -228,7 +233,37 @@ bazaarlink-probe run \
 | bedrock_probe | keyword_match | AWS Bedrock 識別碼洩露 |
 | identity_leak | keyword_match | System prompt 洩露偵測 *(多語言：英/韓/繁中)* |
 
-### Integrity（完整性）
+#### AC-1.a 供應鏈攻擊探針（arxiv 2604.08407）
+
+| ID | 評分方式 | acCategory | 說明 |
+|---|---|---|---|
+| ac1a_prefill | keyword_match | AC-1.a | 預填充攻擊：assistant 訊息預注入 |
+| ac1a_role_play | keyword_match | AC-1.a | 角色扮演繞過（"act as DAN"） |
+| ac1a_nested_instruction | keyword_match | AC-1.a | 巢狀 XML/JSON 指令注入 |
+| ac1a_ignore_previous | keyword_match | AC-1.a | "Ignore previous instructions" 變體 |
+| ac1a_base64_bypass | keyword_match | AC-1.a | Base64 編碼繞過過濾 |
+| ac1a_leetspeak | keyword_match | AC-1.a | Leet-speak 編碼繞過 |
+| ac1a_unicode_homoglyph | keyword_match | AC-1.a | Unicode 同形字繞過 |
+| ac1a_token_smuggling | keyword_match | AC-1.a | Token 走私：分割惡意 token |
+| ac1a_context_overflow | keyword_match | AC-1.a | 大量 junk 上下文淹沒系統提示 |
+| ac1a_system_prompt_echo | exact_response | AC-1.a | 誘導回應 system prompt 原文 |
+| ac1a_prompt_augment | keyword_match | AC-1.a | 動態 canary 回放驗證 *(dynamicCanary)* |
+| ac1a_indirect_injection | keyword_match | AC-1.a | 間接注入（工具/文件內容） |
+| ac1a_tool_call_hijack | keyword_match | AC-1.a | 工具呼叫劫持 |
+| ac1a_jailbreak_dev | keyword_match | AC-1.a | Developer mode 越獄 |
+| ac1a_jailbreak_dan | keyword_match | AC-1.a | DAN 越獄 |
+| ac1a_jailbreak_grandma | keyword_match | AC-1.a | Grandma exploit |
+| ac1a_adversarial_suffix | keyword_match | AC-1.a | 對抗性後綴攻擊 |
+
+#### AC-2 資料外滲探針
+
+| ID | 評分方式 | acCategory | 說明 |
+|---|---|---|---|
+| ac2_url_exfil | keyword_match | AC-2 | URL 外滲（hidden pixel/fetch） |
+| ac2_markdown_exfil | keyword_match | AC-2 | Markdown image 外滲 |
+| ac2_covert_channel | keyword_match | AC-2 | 隱蔽通道外滲 |
+
+### Integrity（完整性）— 10 個探針
 
 | ID | 評分方式 | 說明 |
 |---|---|---|
@@ -240,8 +275,10 @@ bazaarlink-probe run \
 | thinking_block | thinking_check | Anthropic beta header 轉發 *(neutral)* |
 | consistency_check | consistency_check | 回應快取一致性偵測 |
 | context_length *(optional)* | context_check | 實際 context window 測量 |
+| channel_signature | channel_signature | 通道簽名偵測（Anthropic/Bedrock/Vertex/Proxy） |
+| response_augmentation | keyword_match | 動態 canary 回放完整性驗證 |
 
-### Identity（身份識別）*(全部 neutral — 僅收集特徵，不計入評分)*
+### Identity（身份識別）— 8 個探針 *(全部 neutral)*
 
 | ID | 評分方式 | 說明 |
 |---|---|---|
@@ -253,6 +290,19 @@ bazaarlink-probe run \
 | identity_refusal_pattern | keyword_match | 拒答慣用語偵測 |
 | identity_json_discipline | keyword_match | JSON-only 指令遵守度 |
 | identity_capability_claim | keyword_match | 虛假即時能力偵測 |
+
+### Signature（簽章）— 1 個探針
+
+| ID | 評分方式 | acCategory | 說明 |
+|---|---|---|---|
+| ac5_signature_verify | signature_verify | AC-5 | Anthropic 原生 API 簽章驗證（thinking block round-trip） |
+
+### Multimodal（多模態）— 2 個探針
+
+| ID | 評分方式 | 說明 |
+|---|---|---|
+| multimodal_image | keyword_match | 圖片內容解析（base64 PNG 紅色像素） |
+| multimodal_pdf | keyword_match | PDF 文件解析（base64 PDF 含關鍵字） |
 
 ---
 
@@ -278,12 +328,19 @@ const report = await runProbes({
   baseUrl: "https://your-endpoint.com/v1",
   apiKey: "<你的API金鑰>",
   modelId: "claude-opus-4-6",
+  claimedModel: "anthropic/claude-opus-4-6",
   baseline,           // 選填
-  judge: {            // 選填
+  judge: {            // 選填：llm_judge 評分
     baseUrl: "https://api.openai.com/v1",
     apiKey: "<Judge用的API金鑰>",
     modelId: "gpt-4o-mini",
     threshold: 7,
+  },
+  // 選填：身份識別 LLM judge 訊號
+  identityJudge: {
+    baseUrl: "https://api.openai.com/v1",
+    apiKey: "<Judge用的API金鑰>",
+    modelId: "gpt-4o-mini",
   },
   onProgress: (result, index, total) => {
     console.log(`[${index}/${total}] ${result.label}: ${result.passed}`);
@@ -311,7 +368,7 @@ console.log(`Score: ${report.score}/100`);
     {
       "probeId": "string",
       "label": "string",
-      "group": "quality | security | integrity | identity",
+      "group": "quality | security | integrity | identity | signature | multimodal",
       "neutral": false,
       "status": "done | error | skipped",
       "passed": true,
@@ -324,7 +381,18 @@ console.log(`Score: ${report.score}/100`);
       "response": "string",
       "error": null
     }
-  ]
+  ],
+  "identityAssessment": {
+    "status": "match | mismatch | uncertain",
+    "confidence": 0.87,
+    "claimedModel": "anthropic/claude-opus-4-6",
+    "predictedFamily": "anthropic",
+    "predictedCandidates": [
+      { "model": "Anthropic / Claude", "family": "anthropic", "score": 0.87, "reasons": ["Self-identified as Claude", "Markdown bold headers detected"] }
+    ],
+    "riskFlags": [],
+    "evidence": ["Self-identified as Claude", "Refusal pattern: I cannot assist"]
+  }
 }
 ```
 
@@ -460,7 +528,7 @@ jq -s '[.[] | .anomaly] | {total: length, anomalies: map(select(. == true)) | le
 
 ## `monitor` — 定期主動探針監控
 
-定期對端點執行完整的 27 項探針套件，追蹤分數變化，分數掉到閾值以下時 alert。
+定期對端點執行完整的 50 項探針套件，追蹤分數變化，分數掉到閾值以下時 alert。
 
 ```bash
 # 每 5 分鐘測一次，分數低於 70 就 alert
