@@ -746,6 +746,18 @@ npm test
 
 ---
 
+## 致謝
+
+本工具參考並感謝以下開源專案的啟發與貢獻：
+
+| 專案 | 授權 | 貢獻領域 |
+|---|---|---|
+| [LLMmap](https://github.com/pasquini-dario/LLMmap) | MIT | LLM 模型指紋識別技術 |
+| [api-relay-audit](https://github.com/Troyanovsky/api-relay-audit) | MIT | 中轉站安全稽核方法論 |
+| [relayAPI](https://github.com/easychen/relayapi) | — | 中轉站整理與分類資訊 |
+
+---
+
 ## 授權
 
 [AGPL-3.0-only](LICENSE) © BazaarLink
