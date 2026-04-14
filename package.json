@@ -1,8 +1,8 @@
 {
   "name": "@bazaarlink/probe-engine",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "BazaarLink Probe Engine — OpenAI-compatible API quality & integrity test suite (CLI)",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {

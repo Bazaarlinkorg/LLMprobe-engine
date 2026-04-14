@@ -5,7 +5,7 @@
 針對 OpenAI-compatible API 端點的開源 CLI 測試工具與 Node.js 函式庫。  
 執行品質、安全性、完整性、身份識別探針，產出 0–100 評分報告。
 
-> **v0.3.0**：新增 50 個探針（↑ 供應鏈攻擊 AC-1.a/AC-2、簽章驗證 AC-5、多模態、通道簽名偵測、三維融合身份識別）
+> **v0.5.0**：新增 9 個測試檔（214 個測試）、升級通道簽名為三層 16-label 分類器（OpenRouter/Cloudflare/Azure/LiteLLM/Helicone/Portkey/Kong/DashScope/New-API/One-API + Bedrock/Vertex/Anthropic Tier2/3）
 
 ---
 
@@ -688,7 +688,7 @@ npm run build   # 編譯 TypeScript → dist/
 ### 執行測試
 
 ```bash
-npm test                        # 執行全部 143 個測試（約 1 秒）
+npm test                        # 執行全部 214 個測試（約 1 秒）
 npm test -- --reporter=verbose  # 顯示每個測試的名稱與耗時
 npm test -- --watch             # 監聽模式，存檔自動重跑
 ```
@@ -696,25 +696,33 @@ npm test -- --watch             # 監聽模式，存檔自動重跑
 測試結果範例：
 
 ```
- Test Files  10 passed (10)
-      Tests  143 passed (143)
-   Duration  ~800ms
+ Test Files  19 passed (19)
+      Tests  214 passed (214)
+   Duration  ~1.2s
 ```
 
-### 測試涵蓋範圍（10 個測試檔，143 個測試）
+### 測試涵蓋範圍（19 個測試檔，214 個測試）
 
 | 測試檔 | 測試數 | 涵蓋模組 | 主要驗證項目 |
 |---|---|---|---|
-| `probe-suite.test.ts` | 34 | `probe-suite.ts` | 探針陣列結構驗證、所有評分模式（exact_match / keyword_match / header_check / llm_judge）邏輯、neutral 標記、optional 標記 |
+| `probe-suite.test.ts` | 34 | `probe-suite.ts` | 探針陣列結構驗證、所有評分模式（exact_match / keyword_match / header_check / llm_judge）邏輯、neutral 標記、optional 標記、signature/multimodal group |
 | `proxy-analyzer.test.ts` | 27 | `proxy-analyzer.ts` | `profileRequest` sensitive/neutral 分類、`analyzeResponse` 注入關鍵字偵測（exec/eval/subprocess/curl 等）、AC-1.b 判定邏輯三種 verdict、`statsFromLogs` 統計計算 |
 | `probe-preflight.test.ts` | 18 | `probe-preflight.ts` | HTTP 200–299 正常、401/403 中止、model_not_found 中止、429/5xx 警告、空 body / 非 JSON 邊界處理 |
-| `probe-suite.test.ts` autoScore | (含於上) | — | 見上方 |
 | `probe-score.test.ts` | 13 | `probe-score.ts` | 滿分/零分計算、warning 計 0.5 分、neutral 不計入分母、null 雙向影響、error/skipped 計分、混合情境 |
+| `signature-probe.test.ts` | 13 | `signature-probe.ts` | `buildRoundtripBody` 輸出結構驗證、`verifySignatureRoundtrip` 正常/錯誤/missing-block 路徑、token 計算 |
+| `channel-signature.test.ts` | 13 | `channel-signature.ts` | Tier-1 確定性偵測（OpenRouter/Cloudflare/Azure/LiteLLM/Helicone/Portkey/Kong/DashScope/New-API/One-API）、Tier-2 評分（Bedrock/Vertex/Anthropic/APIGateway）、Tier-3 推斷（relay/unknown-proxy）、信心值計算 |
 | `proxy-log-store.test.ts` | 11 | `proxy-log-store.ts` | NDJSON 讀寫、多筆 append、readLast(n)、跨實例持久化、畸形行跳過不拋錯、makeLogId 唯一性 |
 | `sse-compliance.test.ts` | 11 | `sse-compliance.ts` | 格式正確的 SSE stream、缺少 [DONE]、空 stream、非 JSON chunk 偵測、無 choices 警告、失敗時不誤報警告 |
+| `sub-model-matcher.test.ts` | 11 | `sub-model-matcher.ts` | `matchSubModels` top-5 限制、相似度四捨五入、`cosineSimilarity` 計算精確度、空輸入邊界 |
 | `token-inflation.test.ts` | 10 | `token-inflation.ts` | prompt_tokens 閾值邊界、自訂閾值、inflation 金額回報、零分母邊界 |
 | `context-check.test.ts` | 6 | `context-check.ts` | 所有層級通過、最小層級失敗、中段截斷警告、send 函式丟出例外 |
 | `fingerprint-extractor.test.ts` | 7 | `fingerprint-extractor.ts` | Claude/GPT/Qwen 自我宣稱偵測、JSON 污染偵測、詞彙風格特徵、空輸入零訊號 |
+| `fingerprint-fusion.test.ts` | 4 | `fingerprint-fusion.ts` | 三維融合評分（behavioral/linguistic/structural）、加權平均計算 |
+| `fingerprint-judge.test.ts` | 6 | `fingerprint-judge.ts` | match/mismatch/uncertain 判定邏輯、信心閾值邊界 |
+| `fingerprint-vectors.test.ts` | 6 | `fingerprint-vectors.ts` | 向量正規化、cosine distance 計算、零向量邊界 |
+| `multimodal-fixtures.test.ts` | 6 | `multimodal-fixtures.ts` | base64 PNG/PDF fixture 生成、content-block 格式驗證 |
+| `canary-bench.test.ts` | 5 | `canary-bench.ts` | 10 題 canary 題庫結構、verdict 分類（healthy/degraded/failed/error）、通過率計算 |
+| `canary-runner.test.ts` | 7 | `canary-runner.ts` | HTTP 成功/失敗路徑、網路錯誤 → verdict=error、timeout 處理 |
 | `candidate-matcher.test.ts` | 6 | `candidate-matcher.ts` | Anthropic/OpenAI 家族排序、最多回傳 3 候選、match/mismatch/uncertain verdict 推導 |
 
 ### 新增測試
@@ -740,4 +748,6 @@ npm test
 
 ## 授權
 
-MIT © BazaarLink
+[AGPL-3.0-only](LICENSE) © BazaarLink
+
+本專案以 GNU Affero General Public License v3 授權。若您將本軟體或衍生作品部署為網路服務，必須依 AGPL-3.0 條款公開對應的完整原始碼。
