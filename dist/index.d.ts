@@ -26,4 +26,12 @@ export type { JudgeIdentityResult } from "./fingerprint-judge.js";
 export { cosineSimilarity, embedProbeResponses, pickTopVectorScores } from "./fingerprint-vectors.js";
 export type { ReferenceEmbedding } from "./fingerprint-vectors.js";
 export { fuseScores } from "./fingerprint-fusion.js";
+export { CANARY_BENCH, scoreCanaryAnswer } from "./canary-bench.js";
+export type { CanaryItem, CanaryAnswerResult, CanaryCategory } from "./canary-bench.js";
+export { runCanary } from "./canary-runner.js";
+export type { CanaryInput, CanaryResult } from "./canary-runner.js";
+export { parseJudgeThreshold, resolveJudgeConfig } from "./probe-judge-config.js";
+export type { JudgeConfig } from "./probe-judge-config.js";
+export { flattenFeatures, flattenSubModelSignals, matchSubModels } from "./sub-model-matcher.js";
+export type { SubModelCandidate, StoredModelFingerprint } from "./sub-model-matcher.js";
 //# sourceMappingURL=index.d.ts.map

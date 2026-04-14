@@ -1,7 +1,7 @@
 "use strict";
 // src/index.ts — Public API for @bazaarlink/probe-engine (MIT)
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.fuseScores = exports.pickTopVectorScores = exports.embedProbeResponses = exports.cosineSimilarity = exports.judgeFingerprint = exports.verifySignatureRoundtrip = exports.extractThinkingBlock = exports.classifyChannelSignature = exports.claimedModelToFamily = exports.FAMILY_BASELINES = exports.deriveVerdictFromClaimedModel = exports.deriveVerdict = exports.matchCandidates = exports.extractFingerprint = exports.runContextCheck = exports.checkSSECompliance = exports.TOKEN_INFLATION_THRESHOLD = exports.detectTokenInflation = exports.classifyPreflightResult = exports.computeProbeScore = exports.generateCanary = exports.autoScore = exports.PROBE_SUITE = exports.runProbes = void 0;
+exports.matchSubModels = exports.flattenSubModelSignals = exports.flattenFeatures = exports.resolveJudgeConfig = exports.parseJudgeThreshold = exports.runCanary = exports.scoreCanaryAnswer = exports.CANARY_BENCH = exports.fuseScores = exports.pickTopVectorScores = exports.embedProbeResponses = exports.cosineSimilarity = exports.judgeFingerprint = exports.verifySignatureRoundtrip = exports.extractThinkingBlock = exports.classifyChannelSignature = exports.claimedModelToFamily = exports.FAMILY_BASELINES = exports.deriveVerdictFromClaimedModel = exports.deriveVerdict = exports.matchCandidates = exports.extractFingerprint = exports.runContextCheck = exports.checkSSECompliance = exports.TOKEN_INFLATION_THRESHOLD = exports.detectTokenInflation = exports.classifyPreflightResult = exports.computeProbeScore = exports.generateCanary = exports.autoScore = exports.PROBE_SUITE = exports.runProbes = void 0;
 var runner_js_1 = require("./runner.js");
 Object.defineProperty(exports, "runProbes", { enumerable: true, get: function () { return runner_js_1.runProbes; } });
 var probe_suite_js_1 = require("./probe-suite.js");
@@ -42,4 +42,17 @@ Object.defineProperty(exports, "embedProbeResponses", { enumerable: true, get: f
 Object.defineProperty(exports, "pickTopVectorScores", { enumerable: true, get: function () { return fingerprint_vectors_js_1.pickTopVectorScores; } });
 var fingerprint_fusion_js_1 = require("./fingerprint-fusion.js");
 Object.defineProperty(exports, "fuseScores", { enumerable: true, get: function () { return fingerprint_fusion_js_1.fuseScores; } });
+// ── New v0.4.0 modules ────────────────────────────────────────────────────
+var canary_bench_js_1 = require("./canary-bench.js");
+Object.defineProperty(exports, "CANARY_BENCH", { enumerable: true, get: function () { return canary_bench_js_1.CANARY_BENCH; } });
+Object.defineProperty(exports, "scoreCanaryAnswer", { enumerable: true, get: function () { return canary_bench_js_1.scoreCanaryAnswer; } });
+var canary_runner_js_1 = require("./canary-runner.js");
+Object.defineProperty(exports, "runCanary", { enumerable: true, get: function () { return canary_runner_js_1.runCanary; } });
+var probe_judge_config_js_1 = require("./probe-judge-config.js");
+Object.defineProperty(exports, "parseJudgeThreshold", { enumerable: true, get: function () { return probe_judge_config_js_1.parseJudgeThreshold; } });
+Object.defineProperty(exports, "resolveJudgeConfig", { enumerable: true, get: function () { return probe_judge_config_js_1.resolveJudgeConfig; } });
+var sub_model_matcher_js_1 = require("./sub-model-matcher.js");
+Object.defineProperty(exports, "flattenFeatures", { enumerable: true, get: function () { return sub_model_matcher_js_1.flattenFeatures; } });
+Object.defineProperty(exports, "flattenSubModelSignals", { enumerable: true, get: function () { return sub_model_matcher_js_1.flattenSubModelSignals; } });
+Object.defineProperty(exports, "matchSubModels", { enumerable: true, get: function () { return sub_model_matcher_js_1.matchSubModels; } });
 //# sourceMappingURL=index.js.map

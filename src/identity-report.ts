@@ -42,4 +42,11 @@ export interface FingerprintFeatureSet {
   refusal: Record<string, number>;
   /** Signals derived from list format probe (identity_list_format) */
   listFormat: Record<string, number>;
+  /**
+   * Continuous sub-model signals for intra-family discrimination.
+   * Unlike binary category signals (selfClaim etc.), these are floating-point
+   * features that vary between model versions within the same family.
+   * Optional — absent in legacy baselines.
+   */
+  subModelSignals?: Record<string, number>;
 }

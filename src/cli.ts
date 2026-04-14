@@ -3,6 +3,7 @@
 
 import { Command } from "commander";
 import { runProbes, type ProbeResult, type BaselineMap } from "./runner.js";
+import { runCanary } from "./canary-runner.js";
 import { PROBE_SUITE } from "./probe-suite.js";
 import { createProxyServer } from "./proxy-server.js";
 import { ProxyLogStore } from "./proxy-log-store.js";
@@ -40,7 +41,7 @@ const program = new Command();
 program
   .name("bazaarlink-probe")
   .description("Run OpenAI-compatible API quality & integrity probes")
-  .version("0.2.0");
+  .version("0.4.0");
 
 program
   .command("run")
@@ -673,6 +674,81 @@ program
     // Exit with code 2 if last run scored below alert threshold
     const lastScore = history[history.length - 1]?.score ?? 100;
     process.exit(lastScore < alertBelow ? 2 : 0);
+  });
+
+// ── canary command ────────────────────────────────────────────────────────────
+
+program
+  .command("canary")
+  .description("Run 10 deterministic canary checks (no LLM judge) — fast proxy quality baseline")
+  .requiredOption("--base-url <url>", "Base URL of the OpenAI-compatible endpoint")
+  .requiredOption("--api-key <key>", "API key for the endpoint")
+  .requiredOption("--model <id>", "Model ID to test")
+  .option("--timeout <ms>", "Per-request timeout in milliseconds (default: 60000)", "60000")
+  .option("--output <file>", "Write JSON report to file (default: print to stdout)")
+  .option("--quiet", "Suppress per-check progress output", false)
+  .action(async (opts: {
+    baseUrl:   string;
+    apiKey:    string;
+    model:     string;
+    timeout:   string;
+    output?:   string;
+    quiet:     boolean;
+  }) => {
+    const timeoutMs = parseInt(opts.timeout, 10) || 60_000;
+
+    if (!opts.quiet) {
+      console.error(`\nBazaarLink Probe Engine — canary`);
+      console.error(`  Endpoint : ${opts.baseUrl}`);
+      console.error(`  Model    : ${opts.model}`);
+      console.error(`  Checks   : 10 (math, logic, format, recall, code)\n`);
+    }
+
+    const result = await runCanary({
+      baseUrl:   opts.baseUrl,
+      apiKey:    opts.apiKey,
+      modelId:   opts.model,
+      timeoutMs,
+    });
+
+    if (!opts.quiet) {
+      const verdictColor = (v: string) => {
+        if (!process.stderr.isTTY) return v;
+        if (v === "healthy")  return `\x1b[32m${v}\x1b[0m`;
+        if (v === "degraded") return `\x1b[33m${v}\x1b[0m`;
+        return `\x1b[31m${v}\x1b[0m`;
+      };
+
+      for (const d of result.details) {
+        const ic = d.passed ? PASS_ICON : FAIL_ICON;
+        const latStr = `${d.latencyMs}ms`.padStart(7);
+        const line = `  ${ic} ${d.id.padEnd(20)} ${latStr}  actual: ${(d.actual ?? "").slice(0, 60)}`;
+        if (process.stderr.isTTY) {
+          console.error(d.passed ? `\x1b[32m${line}\x1b[0m` : `\x1b[31m${line}\x1b[0m`);
+        } else {
+          console.error(line);
+        }
+      }
+
+      console.error(`\n${"─".repeat(60)}`);
+      console.error(`  Verdict  : ${verdictColor(result.verdict)}`);
+      console.error(`  Score    : ${result.passedChecks}/${result.totalChecks} (${(result.score * 100).toFixed(0)}%)`);
+      console.error(`  Avg lat  : ${result.avgLatencyMs}ms`);
+      if (result.servedModel) console.error(`  Model ID : ${result.servedModel}`);
+      if (result.error) console.error(`  Error    : ${result.error}`);
+      console.error(`${"─".repeat(60)}\n`);
+    }
+
+    const json = JSON.stringify(result, null, 2);
+    if (opts.output) {
+      fs.writeFileSync(opts.output, json, "utf-8");
+      if (!opts.quiet) console.error(`  Report saved to ${opts.output}`);
+    } else if (opts.quiet) {
+      console.log(json);
+    }
+
+    const exitCode = result.verdict === "error" || result.verdict === "failed" ? 1 : 0;
+    process.exit(exitCode);
   });
 
 program.parse();
