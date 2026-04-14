@@ -25,5 +25,23 @@ export interface VerifyResult {
     reason: "ok" | "signature_rejected" | "http_error" | "network_error";
     rawErrorSnippet: string | null;
 }
+export type RoundtripBody = ReturnType<typeof buildRoundtripBody>;
+export declare function buildRoundtripBody(args: RoundtripBodyArgs): {
+    model: string;
+    max_tokens: number;
+    thinking: {
+        type: string;
+        budget_tokens: number;
+    };
+    messages: Array<{
+        role: string;
+        content: string | Array<{
+            type: string;
+            thinking?: string;
+            signature?: string;
+            text?: string;
+        }>;
+    }>;
+};
 export declare function verifySignatureRoundtrip(args: VerifyArgs): Promise<VerifyResult>;
 //# sourceMappingURL=signature-probe.d.ts.map

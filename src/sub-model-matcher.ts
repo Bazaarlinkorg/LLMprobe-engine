@@ -18,7 +18,7 @@ export interface StoredModelFingerprint {
 }
 
 const CATEGORY_ORDER: (keyof FingerprintFeatureSet)[] = [
-  "selfClaim", "lexical", "reasoning", "jsonDiscipline", "refusal", "listFormat",
+  "selfClaim", "lexical", "reasoning", "jsonDiscipline", "refusal", "listFormat", "subModelSignals",
 ];
 
 /** Flatten all feature categories into a single numeric vector. */
@@ -43,7 +43,7 @@ export function flattenSubModelSignals(f: FingerprintFeatureSet): number[] {
   return Object.keys(signals).sort().map(k => signals[k] ?? 0);
 }
 
-function cosineSim(a: number[], b: number[]): number {
+export function cosineSimilarity(a: number[], b: number[]): number {
   const len = Math.min(a.length, b.length);
   let dot = 0, magA = 0, magB = 0;
   for (let i = 0; i < len; i++) {
@@ -82,7 +82,8 @@ export function matchSubModels(
       const maxLen = Math.max(obsVec.length, refVec.length);
       const a = [...obsVec,  ...Array(maxLen - obsVec.length).fill(0)];
       const b = [...refVec,  ...Array(maxLen - refVec.length).fill(0)];
-      return { modelId: ref.modelId, similarity: cosineSim(a, b) };
+      return { modelId: ref.modelId, similarity: Math.round(cosineSimilarity(a, b) * 1000) / 1000 };
     })
-    .sort((a, b) => b.similarity - a.similarity);
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, 5);
 }

@@ -24,7 +24,7 @@ const probe_suite_js_1 = require("../probe-suite.js");
         (0, vitest_1.expect)(new Set(ids).size).toBe(ids.length);
     });
     (0, vitest_1.it)("groups are only valid values", () => {
-        const validGroups = new Set(["quality", "security", "integrity", "identity"]);
+        const validGroups = new Set(["quality", "security", "integrity", "identity", "signature", "multimodal"]);
         for (const p of probe_suite_js_1.PROBE_SUITE) {
             (0, vitest_1.expect)(validGroups.has(p.group)).toBe(true);
         }

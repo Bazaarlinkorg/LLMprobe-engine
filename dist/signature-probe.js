@@ -8,6 +8,7 @@
 // the official verifier accepts.
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.extractThinkingBlock = extractThinkingBlock;
+exports.buildRoundtripBody = buildRoundtripBody;
 exports.verifySignatureRoundtrip = verifySignatureRoundtrip;
 function extractThinkingBlock(raw) {
     if (!raw || typeof raw !== "object")
@@ -29,9 +30,9 @@ function extractThinkingBlock(raw) {
     }
     return null;
 }
-async function verifySignatureRoundtrip(args) {
-    const { endpoint, apiKey, model, originalUserPrompt, thinkingBlock, assistantText, followUpUserPrompt, authHeader = "x-api-key", fetchImpl = fetch, signal, } = args;
-    const body = {
+function buildRoundtripBody(args) {
+    const { model, originalUserPrompt, thinkingBlock, assistantText, followUpUserPrompt } = args;
+    return {
         model,
         max_tokens: 512,
         thinking: { type: "enabled", budget_tokens: 1024 },
@@ -47,6 +48,10 @@ async function verifySignatureRoundtrip(args) {
             { role: "user", content: followUpUserPrompt },
         ],
     };
+}
+async function verifySignatureRoundtrip(args) {
+    const { endpoint, apiKey, authHeader = "x-api-key", fetchImpl = fetch, signal, } = args;
+    const body = buildRoundtripBody(args);
     const headers = {
         "content-type": "application/json",
         "anthropic-version": "2023-06-01",

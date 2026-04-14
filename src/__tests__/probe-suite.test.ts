@@ -27,7 +27,7 @@ describe("PROBE_SUITE structure", () => {
   });
 
   it("groups are only valid values", () => {
-    const validGroups = new Set(["quality", "security", "integrity", "identity"]);
+    const validGroups = new Set(["quality", "security", "integrity", "identity", "signature", "multimodal"]);
     for (const p of PROBE_SUITE) {
       expect(validGroups.has(p.group)).toBe(true);
     }

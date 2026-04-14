@@ -55,16 +55,16 @@ export interface VerifyResult {
   rawErrorSnippet: string | null;
 }
 
-export async function verifySignatureRoundtrip(args: VerifyArgs): Promise<VerifyResult> {
-  const {
-    endpoint, apiKey, model,
-    originalUserPrompt, thinkingBlock, assistantText, followUpUserPrompt,
-    authHeader = "x-api-key",
-    fetchImpl = fetch,
-    signal,
-  } = args;
+export type RoundtripBody = ReturnType<typeof buildRoundtripBody>;
 
-  const body = {
+export function buildRoundtripBody(args: RoundtripBodyArgs): {
+  model: string;
+  max_tokens: number;
+  thinking: { type: string; budget_tokens: number };
+  messages: Array<{ role: string; content: string | Array<{ type: string; thinking?: string; signature?: string; text?: string }> }>;
+} {
+  const { model, originalUserPrompt, thinkingBlock, assistantText, followUpUserPrompt } = args;
+  return {
     model,
     max_tokens: 512,
     thinking: { type: "enabled", budget_tokens: 1024 },
@@ -80,6 +80,17 @@ export async function verifySignatureRoundtrip(args: VerifyArgs): Promise<Verify
       { role: "user", content: followUpUserPrompt },
     ],
   };
+}
+
+export async function verifySignatureRoundtrip(args: VerifyArgs): Promise<VerifyResult> {
+  const {
+    endpoint, apiKey,
+    authHeader = "x-api-key",
+    fetchImpl = fetch,
+    signal,
+  } = args;
+
+  const body = buildRoundtripBody(args);
 
   const headers: Record<string, string> = {
     "content-type": "application/json",

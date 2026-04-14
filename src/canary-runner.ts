@@ -38,34 +38,34 @@ export async function runCanary(input: CanaryInput): Promise<CanaryResult> {
   try {
     for (const item of CANARY_BENCH) {
       const t0 = Date.now();
-      let actual: string | null = null;
-      try {
-        const res = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type":  "application/json",
-            "Authorization": `Bearer ${input.apiKey}`,
-          },
-          body: JSON.stringify({
-            model:       input.modelId,
-            messages:    [{ role: "user", content: item.prompt }],
-            temperature: 0,
-            max_tokens:  64,
-            stream:      false,
-          }),
-          signal: AbortSignal.timeout(timeoutMs),
-        });
-        if (res.ok) {
-          const data = await res.json() as {
-            model?: string;
-            choices?: Array<{ message?: { content?: string } }>;
-          };
-          if (!servedModel && typeof data.model === "string") servedModel = data.model;
-          actual = data.choices?.[0]?.message?.content ?? null;
-        }
-      } catch { /* timeout or network error — actual stays null */ }
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${input.apiKey}`,
+        },
+        body: JSON.stringify({
+          model:       input.modelId,
+          messages:    [{ role: "user", content: item.prompt }],
+          temperature: 0,
+          max_tokens:  64,
+          stream:      false,
+        }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
       const latencyMs = Date.now() - t0;
       totalLatency += latencyMs;
+
+      if (!res.ok) {
+        details.push({ ...scoreCanaryAnswer(item, null), latencyMs });
+        continue;
+      }
+      const data = await res.json() as {
+        model?: string;
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      if (!servedModel && typeof data.model === "string") servedModel = data.model;
+      const actual = data.choices?.[0]?.message?.content ?? null;
       details.push({ ...scoreCanaryAnswer(item, actual), latencyMs });
     }
 

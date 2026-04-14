@@ -43,5 +43,7 @@ export interface FingerprintFeatureSet {
      * Optional — absent in legacy baselines.
      */
     subModelSignals?: Record<string, number>;
+    /** Linguistic fingerprint: answer distributions from multi-run probes. */
+    linguisticFingerprint?: Record<string, number>;
 }
 //# sourceMappingURL=identity-report.d.ts.map

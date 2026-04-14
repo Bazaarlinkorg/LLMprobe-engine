@@ -16,6 +16,7 @@ export declare function flattenFeatures(f: FingerprintFeatureSet): number[];
  * all models within the same family and would dilute the discriminative signal.
  */
 export declare function flattenSubModelSignals(f: FingerprintFeatureSet): number[];
+export declare function cosineSimilarity(a: number[], b: number[]): number;
 /**
  * Compare observed fingerprint against stored per-model reference fingerprints
  * within a specific family. Returns candidates sorted by similarity descending.

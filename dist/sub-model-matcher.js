@@ -7,9 +7,10 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.flattenFeatures = flattenFeatures;
 exports.flattenSubModelSignals = flattenSubModelSignals;
+exports.cosineSimilarity = cosineSimilarity;
 exports.matchSubModels = matchSubModels;
 const CATEGORY_ORDER = [
-    "selfClaim", "lexical", "reasoning", "jsonDiscipline", "refusal", "listFormat",
+    "selfClaim", "lexical", "reasoning", "jsonDiscipline", "refusal", "listFormat", "subModelSignals",
 ];
 /** Flatten all feature categories into a single numeric vector. */
 function flattenFeatures(f) {
@@ -31,7 +32,7 @@ function flattenSubModelSignals(f) {
     const signals = f.subModelSignals ?? {};
     return Object.keys(signals).sort().map(k => signals[k] ?? 0);
 }
-function cosineSim(a, b) {
+function cosineSimilarity(a, b) {
     const len = Math.min(a.length, b.length);
     let dot = 0, magA = 0, magB = 0;
     for (let i = 0; i < len; i++) {
@@ -64,8 +65,9 @@ function matchSubModels(observed, references, family) {
         const maxLen = Math.max(obsVec.length, refVec.length);
         const a = [...obsVec, ...Array(maxLen - obsVec.length).fill(0)];
         const b = [...refVec, ...Array(maxLen - refVec.length).fill(0)];
-        return { modelId: ref.modelId, similarity: cosineSim(a, b) };
+        return { modelId: ref.modelId, similarity: Math.round(cosineSimilarity(a, b) * 1000) / 1000 };
     })
-        .sort((a, b) => b.similarity - a.similarity);
+        .sort((a, b) => b.similarity - a.similarity)
+        .slice(0, 5);
 }
 //# sourceMappingURL=sub-model-matcher.js.map
