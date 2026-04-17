@@ -1,4 +1,4 @@
-// src/fingerprint-vectors.ts — Cosine similarity for fingerprint vector signal (MIT)
+// src/fingerprint-vectors.ts — Cosine similarity for fingerprint vector signal
 
 import type { FamilyScore } from "./identity-report.js";
 
@@ -26,12 +26,13 @@ export function cosineSimilarity(a: number[], b: number[]): number {
  * Given a query embedding and a set of reference embeddings,
  * compute per-family similarity scores (0-1).
  * When multiple references exist for one family, takes the max similarity.
- * Normalises so the highest similarity = 1.0.
+ * Normalizes so the highest similarity = 1.0.
  */
 export function pickTopVectorScores(
   queryEmbedding: number[],
   refs: ReferenceEmbedding[],
 ): FamilyScore[] {
+  // Per-family max similarity (raw cosine, -1 to 1)
   const familyMax: Record<string, number> = {};
   for (const ref of refs) {
     const sim = cosineSimilarity(queryEmbedding, ref.embedding);
@@ -44,6 +45,7 @@ export function pickTopVectorScores(
     return KNOWN_FAMILIES.map(family => ({ family, score: 0 }));
   }
 
+  // Clamp negatives to 0, normalize by max positive
   const maxSim = Math.max(...Object.values(familyMax), 0.0001);
   return KNOWN_FAMILIES.map(family => ({
     family,
@@ -53,7 +55,7 @@ export function pickTopVectorScores(
 
 /**
  * Embed a block of probe responses text via an OpenAI-compatible embeddings endpoint.
- * Returns null if unavailable or if the request fails.
+ * Returns null if unavailable.
  */
 export async function embedProbeResponses(
   responses: Record<string, string>,
