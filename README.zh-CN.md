@@ -5,6 +5,8 @@
 针对 OpenAI-compatible API 端点的开源 CLI 测试工具与 Node.js 函数库。  
 执行品质、安全性、完整性探针，产出 0–100 评分报告。
 
+> **v0.6.0**：新增 26 个探针（Identity 语言指纹 C–G 方向 × 18 个、Sub-Model 子模型识别组 × 8 个）、新增 Sub-Model V3 三探针（`submodel_cutoff` / `submodel_capability` / `submodel_refusal`）、新增 `fingerprint-features-v2` / `fingerprint-build-helpers` 模块。
+
 ---
 
 ## 快速开始
@@ -243,6 +245,8 @@ bazaarlink-probe run \
 
 ### Identity（身份识别）*(全部 neutral — 仅收集特征，不计入评分)*
 
+#### 方向 A/B — 行为 & 风格（8 个）
+
 | ID | 评分方式 | 说明 |
 |---|---|---|
 | identity_style_en | feature_extract | 英文写作风格特征 |
@@ -253,6 +257,89 @@ bazaarlink-probe run \
 | identity_refusal_pattern | keyword_match | 拒答惯用语侦测 |
 | identity_json_discipline | keyword_match | JSON-only 指令遵守度 |
 | identity_capability_claim | keyword_match | 虚假实时能力侦测 |
+
+#### 方向 C — Tokenizer 感知（3 个）
+
+| ID | 评分方式 | 说明 |
+|---|---|---|
+| tok_count_num | feature_extract | 数字 token 计数（GPT tiktoken vs Claude BPE 答案不同） |
+| tok_split_word | feature_extract | 词分割风格（`tokenization` 的 BPE 切法） |
+| tok_self_knowledge | feature_extract | Tokenizer 自我知识（模型对自身 tokenizer 的描述） |
+
+#### 方向 D — 代码风格（3 个）
+
+| ID | 评分方式 | 说明 |
+|---|---|---|
+| code_reverse_list | feature_extract | Python 列表反转风格（`[::-1]` vs `reversed()`） |
+| code_comment_lang | feature_extract | 代码注释语言偏好（英文 / 中文 / 无） |
+| code_error_style | feature_extract | 错误处理风格（`raise` vs `assert` vs `return None`） |
+
+#### 方向 E — 自我知识（3 个）
+
+| ID | 评分方式 | 说明 |
+|---|---|---|
+| meta_creator | feature_extract | 创造者名称格式（Anthropic / OpenAI / Zhipu AI） |
+| meta_context_len | feature_extract | Context 长度自报（数字本身即指纹） |
+| meta_thinking_mode | feature_extract | Extended Thinking 支持（Opus/Sonnet yes，GPT no） |
+
+#### 方向 F — 计算行为（2 个）
+
+| ID | 评分方式 | 说明 |
+|---|---|---|
+| comp_py_float | feature_extract | Python 浮点表示（`0.1+0.2` 输出精度知识） |
+| comp_large_exp | feature_extract | 大数格式偏好（`2^32` 的表示方式） |
+
+#### 方向 G — 时事知识截止（7 个）
+
+| ID | 评分方式 | 说明 |
+|---|---|---|
+| ling_uk_pm | feature_extract | 英国首相（Starmer 2024/07+ vs Sunak） |
+| ling_de_chan | feature_extract | 德国总理（Merz 2025/02+ vs Scholz） |
+| ling_fr_pm | feature_extract | 法国总理（Bayrou 2025/01+ vs Barnier） |
+| ling_jp_pm | feature_extract | 日本第102代首相（石破茂 2024/10+ vs 岸田） |
+| ling_ru_pres | feature_extract | 俄语姓名顺序偏好（姓名顺 vs 名姓顺） |
+| ling_kr_num | feature_extract | 韩语数字系统（汉字语 사십이 vs 固有语 마흔둘） |
+| ling_kr_crisis | feature_extract | 韩国戒严事件（仅 2024/12 后训练的模型知道） |
+
+### Sub-Model（子模型识别）*(全部 neutral — 不计入分数)*
+
+Sub-Model 探针收集每个 checkpoint 的固有行为特征，供子模型分类器（`sub-model-matcher.ts`）区分同家族内的不同版本（如 Opus / Sonnet / Haiku）。
+
+#### 能力悬崖（4 个）
+
+| ID | 评分方式 | 说明 |
+|---|---|---|
+| cap_tower_of_hanoi | feature_extract | 4 盘河内塔（Opus ~100%、Sonnet ~85%、Haiku ~40% 解决率） |
+| cap_letter_count | feature_extract | strawberry 字母计数（Haiku 历史上常答错） |
+| cap_reverse_words | feature_extract | 句子逆序词（准确度与模型大小正相关） |
+| cap_needle_tiny | feature_extract | 微型 needle（Haiku 常漏掉精确短语） |
+
+#### 冗长度 & 效能（2 个）
+
+| ID | 评分方式 | 说明 |
+|---|---|---|
+| verb_explain_photosynthesis | feature_extract | 预设冗长度（Opus 详尽，Haiku 精简） |
+| perf_bulk_echo | feature_extract | TPS 标定（固定 200 token 输出取样 TPS/TTFT） |
+
+#### Tokenizer 边界（1 个）
+
+| ID | 评分方式 | 说明 |
+|---|---|---|
+| tok_edge_zwj | feature_extract | ZWJ emoji 人物计数（安全/格式层因 checkpoint 不同而异） |
+
+#### 推理分布指纹（1 个）
+
+| ID | 评分方式 | 说明 |
+|---|---|---|
+| pi_fingerprint | feature_extract | 词语计数 × 10 次（Opus 27-31，Sonnet 双峰21-25/57，Haiku 57-62，GPT-4o 固定50） |
+
+#### V3 直接识别探针（3 个）
+
+| ID | 评分方式 | 说明 |
+|---|---|---|
+| submodel_cutoff | feature_extract | 直问 training cutoff（YYYY-MM 格式，各 checkpoint 自报值稳定唯一） |
+| submodel_capability | feature_extract | 5 题能力电池（strawberry/星期推算/分数/第100质数/拼字反转），每个 checkpoint 有固定错误向量 |
+| submodel_refusal | feature_extract | 拒答模板提取（Opus 4.7 含 18 U.S.C. § 842 引用，跨 family 几乎唯一） |
 
 ---
 
@@ -327,6 +414,26 @@ console.log(`Score: ${report.score}/100`);
   ]
 }
 ```
+
+## 欺诈中转站案例报告（real-world fraud reports）
+
+BazaarLink 长期用本引擎对 500+ 公开 OpenAI-compatible proxy 做主动探测，公布的案例报告就直接放在本 repo：
+
+**[📄 完整报告 → docs/fraud-reports.zh-CN.md](docs/fraud-reports.zh-CN.md)**（[EN](docs/fraud-reports.en.md) · [繁](docs/fraud-reports.md)）
+
+收录两份分析：
+
+- **Report 1（2026-04-15）— 低分端点异常分析**：30 条样本、171 次探针失败的成因分类。结论：**95% 以上的低分来自 infrastructure 层问题（SSE 空 body、KIRO wrapper 注入、token 膨胀），而非模型能力差。** 列出 20 个已确认异常的 host（含 gpt-5.4 假模型 ID、claude-opus-thinking 流空白、KIRO 连锁拒答、Cursor 62K token 注入等）。
+- **Report 2（2026-04-21）— 端点身份分析**：7 个身份异常案例。用**三向交叉**（① 表面指纹 ② 行为指纹 ③ 子模型 V3）检测：
+  - 3 个**跨家族模型调包**（例：`api.getrouter.top` 声称 Claude Opus 4.7，指纹 98% 吻合 GPT-5.4）
+  - 1 个**同家族降级欺诈**（`api.aipaibox.com` 声称 Opus 4.7、实为 Opus 4.6，账单按 4.7 收费）
+  - 3 个**无法确认的边界案例**
+
+三向交叉的核心逻辑就是本 engine 的 [`computeVerdict()`](src/identity-verdict.ts) + [`classifySubmodelV3()`](src/sub-model-classifier-v3.ts) — 你自己也能跑出一样的结果。
+
+交互版：<https://bazaarlink.ai/probe?tab=report>
+
+---
 
 ## `proxy-watch` — 本地透明 Proxy 监控（AC-1.b 条件式注入检测）
 

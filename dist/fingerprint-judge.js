@@ -1,5 +1,5 @@
 "use strict";
-// src/fingerprint-judge.ts — LLM judge signal for model family identification (MIT)
+// src/fingerprint-judge.ts — LLM judge signal for model family identification
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.parseJudgeIdentityResult = parseJudgeIdentityResult;
 exports.buildJudgeIdentityPrompt = buildJudgeIdentityPrompt;
@@ -53,48 +53,56 @@ Reply with ONLY a JSON object:
  */
 async function judgeFingerprint(responses, judgeBaseUrl, judgeApiKey, judgeModelId) {
     if (!judgeBaseUrl || !judgeApiKey || !judgeModelId || Object.keys(responses).length === 0) {
-        return { scores: [], result: null };
+        return { scores: [], result: null, costUsd: null };
     }
     const prompt = buildJudgeIdentityPrompt(responses);
     let chatUrl;
     try {
-        chatUrl = judgeBaseUrl.replace(/\/+$/, "") + "/chat/completions";
-        new URL(chatUrl); // validate
+        const parsed = new URL(judgeBaseUrl);
+        chatUrl = parsed.href.replace(/\/+$/, "") + "/chat/completions";
     }
     catch {
-        return { scores: [], result: null };
+        return { scores: [], result: null, costUsd: null };
     }
     try {
         const res = await fetch(chatUrl, {
             method: "POST",
-            headers: { Authorization: `Bearer ${judgeApiKey}`, "Content-Type": "application/json" },
+            headers: {
+                Authorization: `Bearer ${judgeApiKey}`,
+                "Content-Type": "application/json",
+            },
             body: JSON.stringify({
                 model: judgeModelId,
                 messages: [
-                    { role: "system", content: "You are a strict JSON-only model fingerprinting expert. Respond with exactly one JSON object and nothing else." },
+                    {
+                        role: "system",
+                        content: "You are a strict JSON-only model fingerprinting expert. Respond with exactly one JSON object and nothing else.",
+                    },
                     { role: "user", content: prompt },
                 ],
                 stream: false,
                 max_tokens: 256,
                 temperature: 0,
             }),
-            signal: AbortSignal.timeout(60000),
+            signal: AbortSignal.timeout(30000),
         });
         if (!res.ok)
-            return { scores: [], result: null };
+            return { scores: [], result: null, costUsd: null };
         const data = await res.json();
         const text = data.choices?.[0]?.message?.content ?? "";
-        const parsed = parseJudgeIdentityResult(text);
-        if (!parsed)
-            return { scores: [], result: null };
-        const scores = KNOWN_FAMILIES.map(f => ({
-            family: f,
-            score: f === parsed.family ? parsed.confidence : 0,
+        const costUsd = typeof data.usage?.cost === "number" ? data.usage.cost : null;
+        const result = parseJudgeIdentityResult(text);
+        if (!result)
+            return { scores: [], result: null, costUsd };
+        // Produce FamilyScore[]: judge's family gets its confidence, all others get 0
+        const scores = KNOWN_FAMILIES.map(family => ({
+            family,
+            score: family === result.family ? result.confidence : 0,
         }));
-        return { scores, result: parsed };
+        return { scores, result, costUsd };
     }
     catch {
-        return { scores: [], result: null };
+        return { scores: [], result: null, costUsd: null };
     }
 }
 //# sourceMappingURL=fingerprint-judge.js.map

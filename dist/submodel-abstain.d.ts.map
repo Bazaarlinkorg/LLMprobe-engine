@@ -1,0 +1,1 @@
+{"version":3,"file":"submodel-abstain.d.ts","sourceRoot":"","sources":["../src/submodel-abstain.ts"],"names":[],"mappings":"AAiBA,MAAM,WAAW,YAAY;IAC3B,SAAS,EAAE,MAAM,CAAC;IAClB,cAAc,EAAE,MAAM,CAAC;IACvB,iBAAiB,EAAE,MAAM,CAAC;IAC1B,aAAa,CAAC,EAAE,MAAM,CAAC;CACxB;AAMD,wBAAgB,qBAAqB,CAAC,KAAK,EAAE,YAAY,GAAG,OAAO,CAUlE"}

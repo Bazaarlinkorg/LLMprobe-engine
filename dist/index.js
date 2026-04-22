@@ -1,7 +1,8 @@
 "use strict";
 // src/index.ts — Public API for @bazaarlink/probe-engine (MIT)
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.matchSubModels = exports.flattenSubModelSignals = exports.flattenFeatures = exports.resolveJudgeConfig = exports.parseJudgeThreshold = exports.runCanary = exports.scoreCanaryAnswer = exports.CANARY_BENCH = exports.fuseScores = exports.pickTopVectorScores = exports.embedProbeResponses = exports.cosineSimilarity = exports.judgeFingerprint = exports.verifySignatureRoundtrip = exports.extractThinkingBlock = exports.classifyChannelSignature = exports.claimedModelToFamily = exports.FAMILY_BASELINES = exports.deriveVerdictFromClaimedModel = exports.deriveVerdict = exports.matchCandidates = exports.extractFingerprint = exports.runContextCheck = exports.checkSSECompliance = exports.TOKEN_INFLATION_THRESHOLD = exports.detectTokenInflation = exports.classifyPreflightResult = exports.computeProbeScore = exports.generateCanary = exports.autoScore = exports.PROBE_SUITE = exports.runProbes = void 0;
+exports.UNIQUENESS_BOOST_PER_MATCH = exports.uniquenessBoost = exports.buildUniquenessMap = exports.TIE_BREAK_GAP = exports.getAllFamilies = exports.getBaselinesForFamily = exports.V3_BASELINES = exports.verifyPairwiseUniqueness = exports.lengthScoreLogGaussian = exports.implyFamilyV3 = exports.extractV3Refusal = exports.extractV3Capability = exports.extractV3Cutoff = exports.extractV3Features = exports.scoreExtractedFeatures = exports.classifySubmodelV3 = exports.V3_HIGH_CONFIDENCE = exports.computeVerdict = exports.matchSubModels = exports.flattenSubModelSignals = exports.flattenFeatures = exports.resolveJudgeConfig = exports.parseJudgeThreshold = exports.runCanary = exports.scoreCanaryAnswer = exports.CANARY_BENCH = exports.fuseScores = exports.pickTopVectorScores = exports.embedProbeResponses = exports.cosineSimilarity = exports.judgeFingerprint = exports.verifySignatureRoundtrip = exports.extractThinkingBlock = exports.classifyChannelSignature = exports.claimedModelToFamily = exports.FAMILY_BASELINES = exports.deriveVerdictFromClaimedModel = exports.deriveVerdict = exports.matchCandidates = exports.extractFingerprint = exports.runContextCheck = exports.checkSSECompliance = exports.TOKEN_INFLATION_THRESHOLD = exports.detectTokenInflation = exports.classifyPreflightResult = exports.computeProbeScore = exports.generateCanary = exports.autoScore = exports.PROBE_SUITE = exports.runProbes = void 0;
+exports.hasUsableLingData = exports.shouldAbstainSubModel = exports.UNIQUENESS_BOOST_CAP = void 0;
 var runner_js_1 = require("./runner.js");
 Object.defineProperty(exports, "runProbes", { enumerable: true, get: function () { return runner_js_1.runProbes; } });
 var probe_suite_js_1 = require("./probe-suite.js");
@@ -55,4 +56,35 @@ var sub_model_matcher_js_1 = require("./sub-model-matcher.js");
 Object.defineProperty(exports, "flattenFeatures", { enumerable: true, get: function () { return sub_model_matcher_js_1.flattenFeatures; } });
 Object.defineProperty(exports, "flattenSubModelSignals", { enumerable: true, get: function () { return sub_model_matcher_js_1.flattenSubModelSignals; } });
 Object.defineProperty(exports, "matchSubModels", { enumerable: true, get: function () { return sub_model_matcher_js_1.matchSubModels; } });
+// ── v0.6.0: Three-way cross-check (surface / behavior / v3) ───────────────
+// Identity verdict: the "三向交叉" logic that cross-checks three independent
+// fingerprint signals against the claimed model family to flag spoofing.
+var identity_verdict_js_1 = require("./identity-verdict.js");
+Object.defineProperty(exports, "computeVerdict", { enumerable: true, get: function () { return identity_verdict_js_1.computeVerdict; } });
+Object.defineProperty(exports, "V3_HIGH_CONFIDENCE", { enumerable: true, get: function () { return identity_verdict_js_1.V3_HIGH_CONFIDENCE; } });
+// V3 deterministic sub-model classifier: uses submodel_cutoff / submodel_capability /
+// submodel_refusal probes to identify the exact sub-model (e.g. Claude Opus 4.6 vs 4.7).
+var sub_model_classifier_v3_js_1 = require("./sub-model-classifier-v3.js");
+Object.defineProperty(exports, "classifySubmodelV3", { enumerable: true, get: function () { return sub_model_classifier_v3_js_1.classifySubmodelV3; } });
+Object.defineProperty(exports, "scoreExtractedFeatures", { enumerable: true, get: function () { return sub_model_classifier_v3_js_1.scoreExtractedFeatures; } });
+Object.defineProperty(exports, "extractV3Features", { enumerable: true, get: function () { return sub_model_classifier_v3_js_1.extractV3Features; } });
+Object.defineProperty(exports, "extractV3Cutoff", { enumerable: true, get: function () { return sub_model_classifier_v3_js_1.extractCutoff; } });
+Object.defineProperty(exports, "extractV3Capability", { enumerable: true, get: function () { return sub_model_classifier_v3_js_1.extractCapability; } });
+Object.defineProperty(exports, "extractV3Refusal", { enumerable: true, get: function () { return sub_model_classifier_v3_js_1.extractRefusal; } });
+Object.defineProperty(exports, "implyFamilyV3", { enumerable: true, get: function () { return sub_model_classifier_v3_js_1.implyFamily; } });
+Object.defineProperty(exports, "lengthScoreLogGaussian", { enumerable: true, get: function () { return sub_model_classifier_v3_js_1.lengthScoreLogGaussian; } });
+Object.defineProperty(exports, "verifyPairwiseUniqueness", { enumerable: true, get: function () { return sub_model_classifier_v3_js_1.verifyPairwiseUniqueness; } });
+Object.defineProperty(exports, "V3_BASELINES", { enumerable: true, get: function () { return sub_model_classifier_v3_js_1.V3_BASELINES; } });
+Object.defineProperty(exports, "getBaselinesForFamily", { enumerable: true, get: function () { return sub_model_classifier_v3_js_1.getBaselinesForFamily; } });
+Object.defineProperty(exports, "getAllFamilies", { enumerable: true, get: function () { return sub_model_classifier_v3_js_1.getAllFamilies; } });
+Object.defineProperty(exports, "TIE_BREAK_GAP", { enumerable: true, get: function () { return sub_model_classifier_v3_js_1.TIE_BREAK_GAP; } });
+var sub_model_v3_uniqueness_js_1 = require("./sub-model-v3-uniqueness.js");
+Object.defineProperty(exports, "buildUniquenessMap", { enumerable: true, get: function () { return sub_model_v3_uniqueness_js_1.buildUniquenessMap; } });
+Object.defineProperty(exports, "uniquenessBoost", { enumerable: true, get: function () { return sub_model_v3_uniqueness_js_1.uniquenessBoost; } });
+Object.defineProperty(exports, "UNIQUENESS_BOOST_PER_MATCH", { enumerable: true, get: function () { return sub_model_v3_uniqueness_js_1.UNIQUENESS_BOOST_PER_MATCH; } });
+Object.defineProperty(exports, "UNIQUENESS_BOOST_CAP", { enumerable: true, get: function () { return sub_model_v3_uniqueness_js_1.UNIQUENESS_BOOST_CAP; } });
+var submodel_abstain_js_1 = require("./submodel-abstain.js");
+Object.defineProperty(exports, "shouldAbstainSubModel", { enumerable: true, get: function () { return submodel_abstain_js_1.shouldAbstainSubModel; } });
+var identity_phase_gate_js_1 = require("./identity-phase-gate.js");
+Object.defineProperty(exports, "hasUsableLingData", { enumerable: true, get: function () { return identity_phase_gate_js_1.hasUsableLingData; } });
 //# sourceMappingURL=index.js.map

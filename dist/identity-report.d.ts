@@ -45,5 +45,7 @@ export interface FingerprintFeatureSet {
     subModelSignals?: Record<string, number>;
     /** Linguistic fingerprint: answer distributions from multi-run probes. */
     linguisticFingerprint?: Record<string, number>;
+    /** Text-structural lexical features aggregated across all response texts. */
+    textStructure?: Record<string, number>;
 }
 //# sourceMappingURL=identity-report.d.ts.map

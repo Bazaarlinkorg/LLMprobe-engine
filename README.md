@@ -5,7 +5,7 @@
 針對 OpenAI-compatible API 端點的開源 CLI 測試工具與 Node.js 函式庫。  
 執行品質、安全性、完整性、身份識別探針，產出 0–100 評分報告。
 
-> **v0.5.0**：新增 9 個測試檔（214 個測試）、升級通道簽名為三層 16-label 分類器（OpenRouter/Cloudflare/Azure/LiteLLM/Helicone/Portkey/Kong/DashScope/New-API/One-API + Bedrock/Vertex/Anthropic Tier2/3）
+> **v0.6.0**：新增 26 個探針（Identity 語言指紋 C–G 方向 × 18 個、Sub-Model 子模型識別組 × 8 個）、新增 Sub-Model V3 三探針（`submodel_cutoff` / `submodel_capability` / `submodel_refusal`）、新增 `fingerprint-features-v2` / `fingerprint-build-helpers` 模組
 
 ---
 
@@ -278,7 +278,9 @@ bazaarlink-probe run \
 | channel_signature | channel_signature | 通道簽名偵測（Anthropic/Bedrock/Vertex/Proxy） |
 | response_augmentation | keyword_match | 動態 canary 回放完整性驗證 |
 
-### Identity（身份識別）— 8 個探針 *(全部 neutral)*
+### Identity（身份識別）— 26 個探針 *(全部 neutral)*
+
+#### 方向 A/B — 行為 & 風格（8 個）
 
 | ID | 評分方式 | 說明 |
 |---|---|---|
@@ -290,6 +292,49 @@ bazaarlink-probe run \
 | identity_refusal_pattern | keyword_match | 拒答慣用語偵測 |
 | identity_json_discipline | keyword_match | JSON-only 指令遵守度 |
 | identity_capability_claim | keyword_match | 虛假即時能力偵測 |
+
+#### 方向 C — Tokenizer 感知（3 個）
+
+| ID | 評分方式 | 說明 |
+|---|---|---|
+| tok_count_num | feature_extract | 數字 token 計數（GPT tiktoken vs Claude BPE 答案不同） |
+| tok_split_word | feature_extract | 詞分割風格（`tokenization` 的 BPE 切法） |
+| tok_self_knowledge | feature_extract | Tokenizer 自我知識（模型對自身 tokenizer 的描述） |
+
+#### 方向 D — 代碼風格（3 個）
+
+| ID | 評分方式 | 說明 |
+|---|---|---|
+| code_reverse_list | feature_extract | Python 列表反轉風格（`[::-1]` vs `reversed()`） |
+| code_comment_lang | feature_extract | 代碼注釋語言偏好（英文 / 中文 / 無） |
+| code_error_style | feature_extract | 錯誤處理風格（`raise` vs `assert` vs `return None`） |
+
+#### 方向 E — 自我知識（3 個）
+
+| ID | 評分方式 | 說明 |
+|---|---|---|
+| meta_creator | feature_extract | 創造者名稱格式（Anthropic / OpenAI / Zhipu AI） |
+| meta_context_len | feature_extract | Context 長度自報（數字本身即指紋） |
+| meta_thinking_mode | feature_extract | Extended Thinking 支援自報（Opus/Sonnet yes，GPT no） |
+
+#### 方向 F — 計算行為（2 個）
+
+| ID | 評分方式 | 說明 |
+|---|---|---|
+| comp_py_float | feature_extract | Python 浮點表示（`0.1+0.2` 輸出精度知識） |
+| comp_large_exp | feature_extract | 大數格式偏好（`2^32` 的表示方式） |
+
+#### 方向 G — 時事知識截止（7 個）
+
+| ID | 評分方式 | 說明 |
+|---|---|---|
+| ling_uk_pm | feature_extract | 英國首相（Starmer 2024/07+ vs Sunak） |
+| ling_de_chan | feature_extract | 德國總理（Merz 2025/02+ vs Scholz） |
+| ling_fr_pm | feature_extract | 法國總理（Bayrou 2025/01+ vs Barnier） |
+| ling_jp_pm | feature_extract | 日本102代首相（石破茂 2024/10+ vs 岸田） |
+| ling_ru_pres | feature_extract | 俄語姓名順序偏好（姓名順 vs 名姓順） |
+| ling_kr_num | feature_extract | 韓語數字系統（漢字語 사십이 vs 固有語 마흔둘） |
+| ling_kr_crisis | feature_extract | 韓國戒嚴事件（僅 2024/12 後訓練的模型知道） |
 
 ### Signature（簽章）— 1 個探針
 
@@ -303,6 +348,46 @@ bazaarlink-probe run \
 |---|---|---|
 | multimodal_image | keyword_match | 圖片內容解析（base64 PNG 紅色像素） |
 | multimodal_pdf | keyword_match | PDF 文件解析（base64 PDF 含關鍵字） |
+
+### Sub-Model（子模型識別）— 11 個探針 *(全部 neutral — 不計入分數)*
+
+Sub-Model 探針收集每個 checkpoint 的固有行為特徵，供子模型分類器（`sub-model-matcher.ts`）用於區分同家族內的不同版本（如 Opus / Sonnet / Haiku）。
+
+#### 能力懸崖（4 個）
+
+| ID | 評分方式 | 說明 |
+|---|---|---|
+| cap_tower_of_hanoi | feature_extract | 4 盤河內塔（Opus ~100%、Sonnet ~85%、Haiku ~40% 解決率） |
+| cap_letter_count | feature_extract | strawberry 字母計數（Haiku 歷史上常答錯） |
+| cap_reverse_words | feature_extract | 句子逆序詞（準確度與模型大小正相關） |
+| cap_needle_tiny | feature_extract | 微型 needle（Haiku 常漏掉精確短語） |
+
+#### 冗長度 & 效能（2 個）
+
+| ID | 評分方式 | 說明 |
+|---|---|---|
+| verb_explain_photosynthesis | feature_extract | 預設冗長度（Opus 詳盡，Haiku 精簡） |
+| perf_bulk_echo | feature_extract | TPS 標定（固定 200 token 輸出取樣 TPS/TTFT） |
+
+#### Tokenizer 邊界（1 個）
+
+| ID | 評分方式 | 說明 |
+|---|---|---|
+| tok_edge_zwj | feature_extract | ZWJ emoji 人物計數（安全/格式層因 checkpoint 不同而異） |
+
+#### 推理分佈指紋（1 個）
+
+| ID | 評分方式 | 說明 |
+|---|---|---|
+| pi_fingerprint | feature_extract | 詞語計數 × 10 次（Opus 27-31，Sonnet 雙峰21-25/57，Haiku 57-62，GPT-4o 固定50） |
+
+#### V3 直接識別探針（3 個）
+
+| ID | 評分方式 | 說明 |
+|---|---|---|
+| submodel_cutoff | feature_extract | 直問 training cutoff（YYYY-MM 格式，各 checkpoint 自報值穩定唯一） |
+| submodel_capability | feature_extract | 5 題能力電池（strawberry/星期推算/分數/第100質數/拼字反轉），每個 checkpoint 有固定錯誤向量 |
+| submodel_refusal | feature_extract | 拒答模板提取（Opus 4.7 含 18 U.S.C. § 842 引用，跨 family 幾乎唯一） |
 
 ---
 
@@ -368,7 +453,7 @@ console.log(`Score: ${report.score}/100`);
     {
       "probeId": "string",
       "label": "string",
-      "group": "quality | security | integrity | identity | signature | multimodal",
+      "group": "quality | security | integrity | identity | signature | multimodal | submodel",
       "neutral": false,
       "status": "done | error | skipped",
       "passed": true,
@@ -395,6 +480,26 @@ console.log(`Score: ${report.score}/100`);
   }
 }
 ```
+
+---
+
+## 詐欺中轉站案例報告（real-world fraud reports）
+
+BazaarLink 長期用本引擎對 500+ 公開 OpenAI-compatible proxy 做主動探測，公布的案例報告就直接放在本 repo：
+
+**[📄 完整報告 → docs/fraud-reports.md](docs/fraud-reports.md)**（[EN](docs/fraud-reports.en.md) · [简](docs/fraud-reports.zh-CN.md)）
+
+收錄兩份分析：
+
+- **Report 1（2026-04-15）— 低分端點異常分析**：30 筆樣本、171 次探針失敗的成因分類。結論：**95% 以上的低分來自 infrastructure 層問題（SSE 空 body、KIRO wrapper 注入、token 膨脹），而非模型能力差。** 列出 20 個已確認異常的 host（含 gpt-5.4 假模型 ID、claude-opus-thinking 串流空白、KIRO 連鎖拒答、Cursor 62K token 注入等）。
+- **Report 2（2026-04-21）— 端點身份分析**：7 個身份異常案例。用**三向交叉**（① 表面指紋 ② 行為指紋 ③ 子模型 V3）偵測：
+  - 3 個**跨家族模型調包**（例：`api.getrouter.top` 聲稱 Claude Opus 4.7，指紋 98% 吻合 GPT-5.4）
+  - 1 個**同家族降級詐欺**（`api.aipaibox.com` 聲稱 Opus 4.7、實為 Opus 4.6，帳單照 4.7 收費）
+  - 3 個**無法確認的邊界案例**
+
+三向交叉的核心邏輯就是本 engine 的 [`computeVerdict()`](src/identity-verdict.ts) + [`classifySubmodelV3()`](src/sub-model-classifier-v3.ts) — 你自己也能跑出一樣的結果。
+
+互動版：<https://bazaarlink.ai/probe?tab=report>
 
 ---
 

@@ -1,5 +1,5 @@
 "use strict";
-// src/fingerprint-vectors.ts — Cosine similarity for fingerprint vector signal (MIT)
+// src/fingerprint-vectors.ts — Cosine similarity for fingerprint vector signal
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.cosineSimilarity = cosineSimilarity;
 exports.pickTopVectorScores = pickTopVectorScores;
@@ -22,9 +22,10 @@ function cosineSimilarity(a, b) {
  * Given a query embedding and a set of reference embeddings,
  * compute per-family similarity scores (0-1).
  * When multiple references exist for one family, takes the max similarity.
- * Normalises so the highest similarity = 1.0.
+ * Normalizes so the highest similarity = 1.0.
  */
 function pickTopVectorScores(queryEmbedding, refs) {
+    // Per-family max similarity (raw cosine, -1 to 1)
     const familyMax = {};
     for (const ref of refs) {
         const sim = cosineSimilarity(queryEmbedding, ref.embedding);
@@ -35,6 +36,7 @@ function pickTopVectorScores(queryEmbedding, refs) {
     if (Object.keys(familyMax).length === 0) {
         return KNOWN_FAMILIES.map(family => ({ family, score: 0 }));
     }
+    // Clamp negatives to 0, normalize by max positive
     const maxSim = Math.max(...Object.values(familyMax), 0.0001);
     return KNOWN_FAMILIES.map(family => ({
         family,
@@ -43,7 +45,7 @@ function pickTopVectorScores(queryEmbedding, refs) {
 }
 /**
  * Embed a block of probe responses text via an OpenAI-compatible embeddings endpoint.
- * Returns null if unavailable or if the request fails.
+ * Returns null if unavailable.
  */
 async function embedProbeResponses(responses, baseUrl, apiKey, modelId) {
     if (!apiKey || !modelId || Object.keys(responses).length === 0)

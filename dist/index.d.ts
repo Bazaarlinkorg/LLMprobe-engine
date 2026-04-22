@@ -34,4 +34,13 @@ export { parseJudgeThreshold, resolveJudgeConfig } from "./probe-judge-config.js
 export type { JudgeConfig } from "./probe-judge-config.js";
 export { flattenFeatures, flattenSubModelSignals, matchSubModels } from "./sub-model-matcher.js";
 export type { SubModelCandidate, StoredModelFingerprint } from "./sub-model-matcher.js";
+export { computeVerdict, V3_HIGH_CONFIDENCE } from "./identity-verdict.js";
+export type { VerdictStatus, VerdictInput, VerdictResult, ConfidenceBand, } from "./identity-verdict.js";
+export { classifySubmodelV3, scoreExtractedFeatures, extractV3Features, extractCutoff as extractV3Cutoff, extractCapability as extractV3Capability, extractRefusal as extractV3Refusal, implyFamily as implyFamilyV3, lengthScoreLogGaussian, verifyPairwiseUniqueness, V3_BASELINES, getBaselinesForFamily, getAllFamilies, TIE_BREAK_GAP, } from "./sub-model-classifier-v3.js";
+export type { V3Features, V3Match, V3Output, ClassifySubmodelV3Options, } from "./sub-model-classifier-v3.js";
+export type { SubmodelBaselineV3 } from "./sub-model-baselines-v3.js";
+export { buildUniquenessMap, uniquenessBoost, UNIQUENESS_BOOST_PER_MATCH, UNIQUENESS_BOOST_CAP, } from "./sub-model-v3-uniqueness.js";
+export { shouldAbstainSubModel } from "./submodel-abstain.js";
+export type { AbstainInput } from "./submodel-abstain.js";
+export { hasUsableLingData } from "./identity-phase-gate.js";
 //# sourceMappingURL=index.d.ts.map

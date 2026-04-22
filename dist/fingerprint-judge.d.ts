@@ -16,5 +16,6 @@ export declare function buildJudgeIdentityPrompt(responses: Record<string, strin
 export declare function judgeFingerprint(responses: Record<string, string>, judgeBaseUrl: string, judgeApiKey: string, judgeModelId: string): Promise<{
     scores: FamilyScore[];
     result: JudgeIdentityResult | null;
+    costUsd: number | null;
 }>;
 //# sourceMappingURL=fingerprint-judge.d.ts.map

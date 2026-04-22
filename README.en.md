@@ -5,6 +5,8 @@
 An open-source CLI tool and Node.js library for testing OpenAI-compatible API endpoints.  
 Runs a suite of quality, security, and integrity probes and generates a 0–100 score report.
 
+> **v0.6.0**: Added 26 probes (Identity linguistic fingerprint directions C–G × 18, Sub-Model identification group × 8), new Sub-Model V3 discriminators (`submodel_cutoff` / `submodel_capability` / `submodel_refusal`), new `fingerprint-features-v2` / `fingerprint-build-helpers` modules.
+
 ---
 
 ## Quick Start
@@ -243,6 +245,8 @@ bazaarlink-probe run \
 
 ### Identity *(neutral — fingerprint collection, not scored)*
 
+#### Direction A/B — Behaviour & Style (8)
+
 | ID | Scoring | Description |
 |---|---|---|
 | identity_style_en | feature_extract | English writing style fingerprint |
@@ -253,6 +257,89 @@ bazaarlink-probe run \
 | identity_refusal_pattern | keyword_match | Refusal phrase pattern detection |
 | identity_json_discipline | keyword_match | JSON-only instruction compliance |
 | identity_capability_claim | keyword_match | False real-time capability detection |
+
+#### Direction C — Tokenization Awareness (3)
+
+| ID | Scoring | Description |
+|---|---|---|
+| tok_count_num | feature_extract | Digit token count (GPT tiktoken vs Claude BPE yield different answers) |
+| tok_split_word | feature_extract | Subword split style (`tokenization` BPE segmentation) |
+| tok_self_knowledge | feature_extract | Tokenizer self-knowledge (how the model describes its own tokenizer) |
+
+#### Direction D — Code Style (3)
+
+| ID | Scoring | Description |
+|---|---|---|
+| code_reverse_list | feature_extract | Python list reversal style (`[::-1]` vs `reversed()`) |
+| code_comment_lang | feature_extract | Code comment language preference (English / Chinese / none) |
+| code_error_style | feature_extract | Error handling style (`raise` vs `assert` vs `return None`) |
+
+#### Direction E — Self-Knowledge (3)
+
+| ID | Scoring | Description |
+|---|---|---|
+| meta_creator | feature_extract | Creator name format (Anthropic / OpenAI / Zhipu AI) |
+| meta_context_len | feature_extract | Context window self-report (the number itself is the fingerprint) |
+| meta_thinking_mode | feature_extract | Extended thinking support (Opus/Sonnet yes, GPT no) |
+
+#### Direction F — Computational Behaviour (2)
+
+| ID | Scoring | Description |
+|---|---|---|
+| comp_py_float | feature_extract | Python float representation (`0.1 + 0.2` output knowledge) |
+| comp_large_exp | feature_extract | Large number format preference (`2^32` representation) |
+
+#### Direction G — Temporal Knowledge Cutoff (7)
+
+| ID | Scoring | Description |
+|---|---|---|
+| ling_uk_pm | feature_extract | UK PM (Starmer 2024/07+ vs Sunak) |
+| ling_de_chan | feature_extract | German Chancellor (Merz 2025/02+ vs Scholz) |
+| ling_fr_pm | feature_extract | French PM (Bayrou 2025/01+ vs Barnier) |
+| ling_jp_pm | feature_extract | Japan 102nd PM (Ishiba 2024/10+ vs Kishida) |
+| ling_ru_pres | feature_extract | Russian name order preference (family-first vs given-first) |
+| ling_kr_num | feature_extract | Korean numeral system (Sino-Korean 사십이 vs native 마흔둘) |
+| ling_kr_crisis | feature_extract | South Korea martial law event (only models trained after 2024/12 know) |
+
+### Sub-Model *(neutral — not scored)*
+
+Sub-Model probes collect checkpoint-intrinsic behavioural signals for the sub-model classifier (`sub-model-matcher.ts`) to distinguish versions within the same family (e.g. Opus / Sonnet / Haiku).
+
+#### Capability Cliff (4)
+
+| ID | Scoring | Description |
+|---|---|---|
+| cap_tower_of_hanoi | feature_extract | 4-disk Tower of Hanoi (Opus ~100%, Sonnet ~85%, Haiku ~40% solve rate) |
+| cap_letter_count | feature_extract | Letter count in "strawberry" (Haiku historically fails) |
+| cap_reverse_words | feature_extract | Reverse word order (accuracy scales with model size) |
+| cap_needle_tiny | feature_extract | Tiny needle-in-haystack (Haiku frequently misses the exact phrase) |
+
+#### Verbosity & Performance (2)
+
+| ID | Scoring | Description |
+|---|---|---|
+| verb_explain_photosynthesis | feature_extract | Default verbosity (Opus verbose, Haiku terse) |
+| perf_bulk_echo | feature_extract | TPS calibration (fixed 200-token output for stable TPS/TTFT sampling) |
+
+#### Tokenizer Edge (1)
+
+| ID | Scoring | Description |
+|---|---|---|
+| tok_edge_zwj | feature_extract | ZWJ emoji figure count (safety/formatter layer differs between checkpoints) |
+
+#### Distribution Fingerprint (1)
+
+| ID | Scoring | Description |
+|---|---|---|
+| pi_fingerprint | feature_extract | Word count × 10 runs (Opus 27–31, Sonnet bimodal 21–25/57, Haiku 57–62, GPT-4o always 50) |
+
+#### V3 Direct Discriminators (3)
+
+| ID | Scoring | Description |
+|---|---|---|
+| submodel_cutoff | feature_extract | Direct cutoff query (YYYY-MM — each checkpoint self-reports a stable unique value) |
+| submodel_capability | feature_extract | 5-question battery (strawberry/weekday math/fraction/100th prime/spell backwards) — each checkpoint yields a distinct answer vector |
+| submodel_refusal | feature_extract | Refusal template extraction (Opus 4.7 cites 18 U.S.C. § 842 — near-unique cross-family signal) |
 
 ---
 
@@ -327,6 +414,26 @@ console.log(`Score: ${report.score}/100`);
   ]
 }
 ```
+
+---
+
+## Real-world fraud reports
+
+BazaarLink runs this engine against 500+ public OpenAI-compatible proxies and publishes the resulting case studies directly in this repo:
+
+**[📄 Full reports → docs/fraud-reports.en.md](docs/fraud-reports.en.md)** ([繁](docs/fraud-reports.md) · [简](docs/fraud-reports.zh-CN.md))
+
+Two analyses:
+
+- **Report 1 (2026-04-15) — Low-score endpoint anomalies**: 30 samples, 171 probe failures, taxonomised. Headline: **>95% of low scores are infrastructure-layer problems (SSE empty bodies, KIRO wrapper injection, token inflation) — not model capability.** 20 confirmed anomalous hosts listed (fake `gpt-5.4` model IDs, claude-opus-thinking empty streams, KIRO refusal chains, Cursor 62K-token injection, and more).
+- **Report 2 (2026-04-21) — Endpoint identity analysis**: 7 identity anomalies. Uses a **three-way cross-check** (① surface fingerprint ② behavior fingerprint ③ sub-model V3):
+  - 3 × **cross-family model swap** (e.g. `api.getrouter.top` claims Claude Opus 4.7 but fingerprint is 98% match to GPT-5.4)
+  - 1 × **same-family downgrade fraud** (`api.aipaibox.com` claims Opus 4.7, actually Opus 4.6, billed at 4.7 rate)
+  - 3 × **borderline cases** (top-2 sub-models too close to call)
+
+The three-way cross-check is exactly this engine's [`computeVerdict()`](src/identity-verdict.ts) + [`classifySubmodelV3()`](src/sub-model-classifier-v3.ts) — you can reproduce the same results yourself.
+
+Interactive version: <https://bazaarlink.ai/probe?tab=report>
 
 ---
 

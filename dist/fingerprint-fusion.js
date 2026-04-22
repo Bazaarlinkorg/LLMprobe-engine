@@ -1,5 +1,5 @@
 "use strict";
-// src/fingerprint-fusion.ts — Merge rule-based, judge, and vector signals (MIT)
+// src/fingerprint-fusion.ts — Merge rule-based, judge, and vector signals
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.fuseScores = fuseScores;
 const fingerprint_baseline_js_1 = require("./fingerprint-baseline.js");
@@ -13,9 +13,8 @@ function getDisplayName(family) {
 }
 /**
  * Fuse three signal sources into a ranked IdentityCandidate[].
- *
- * - ruleScores:   from matchCandidatesRaw() — always present
- * - judgeScores:  from judgeFingerprint()   — empty [] if unavailable
+ * - ruleScores: from matchCandidatesRaw() — always present
+ * - judgeScores: from judgeFingerprint() — empty [] if unavailable
  * - vectorScores: from pickTopVectorScores() — empty [] if unavailable
  *
  * Returns top-3 candidates with fused 0-1 score.
@@ -23,6 +22,7 @@ function getDisplayName(family) {
 function fuseScores(ruleScores, judgeScores, vectorScores) {
     const hasJudge = judgeScores.length > 0;
     const hasVector = vectorScores.length > 0;
+    // Redistribute weights when optional signals are missing
     let wRule = W_RULE;
     let wJudge = hasJudge ? W_JUDGE : 0;
     let wVector = hasVector ? W_VECTOR : 0;
@@ -52,7 +52,7 @@ function fuseScores(ruleScores, judgeScores, vectorScores) {
         family: s.family,
         model: getDisplayName(s.family),
         score: Math.round(s.score * 1000) / 1000,
-        reasons: [],
+        reasons: [], // populated by caller from individual signals
     }));
 }
 //# sourceMappingURL=fingerprint-fusion.js.map

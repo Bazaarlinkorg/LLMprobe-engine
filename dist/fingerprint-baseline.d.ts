@@ -11,6 +11,5 @@ export interface FamilyBaseline {
  * Negative weight: signal contradicts this family.
  */
 export declare const FAMILY_BASELINES: FamilyBaseline[];
-/** Map a claimedModel string to its expected family identifier. Returns undefined if unknown. */
 export declare function claimedModelToFamily(claimedModel: string): string | undefined;
 //# sourceMappingURL=fingerprint-baseline.d.ts.map
