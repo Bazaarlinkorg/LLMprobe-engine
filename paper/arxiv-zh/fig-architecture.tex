@@ -1,0 +1,85 @@
+% fig-architecture.tex — Figure 1: Four-layer detection architecture
+% Self-contained TikZ figure. Compile with pdflatex/xelatex/lualatex.
+% Used by main.tex via \input{fig-architecture}.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  node distance=4mm and 6mm,
+  every node/.style={font=\small},
+  layer/.style={
+    draw, rounded corners=2pt,
+    minimum width=42mm, minimum height=10mm,
+    align=center, fill=gray!8,
+  },
+  surface/.style={layer, fill=blue!7},
+  behavior/.style={layer, fill=blue!12},
+  v3/.style={layer, fill=orange!12},
+  v3e/.style={layer, fill=orange!18},
+  fusion/.style={layer, fill=green!12, minimum width=88mm, minimum height=12mm},
+  input/.style={
+    draw, rounded corners=2pt,
+    minimum width=88mm, minimum height=8mm,
+    align=center, fill=gray!4,
+  },
+  output/.style={
+    draw, rounded corners=2pt,
+    minimum width=88mm, minimum height=8mm,
+    align=center, fill=gray!4,
+    font=\small\itshape,
+  },
+  arrow/.style={-{Latex[length=1.6mm]}, thick, gray!70!black},
+  label/.style={font=\scriptsize\itshape, gray!50!black},
+]
+
+% Top: input
+\node[input] (input) {Probe responses from \texttt{(baseUrl, model, key)}};
+
+% Layer 1 + Layer 2 side by side
+\node[surface, below left=10mm and 0mm of input] (l1) {%
+  \textbf{Layer \textcircled{\scriptsize 1}}\\Surface fingerprint\\(family weights)};
+\node[behavior, below right=10mm and 0mm of input] (l2) {%
+  \textbf{Layer \textcircled{\scriptsize 2}}\\Behavior column\\(self-claim zeroed)};
+
+% Layer 3 below
+\node[v3, below=10mm of input, yshift=-22mm] (l3) {%
+  \textbf{Layer \textcircled{\scriptsize 3}} \quad Sub-model deterministic match\\
+  cutoff $\,\cdot\,$ capability $\,\cdot\,$ refusal-prefix};
+\path (l3.west) -- node[layer, minimum width=88mm, draw=none, fill=none] {} (l3.east);
+
+% Layer 4 below
+\node[v3e, below=4mm of l3] (l4) {%
+  \textbf{Layer \textcircled{\scriptsize 4}} \quad Behavioral-vector extension\\
+  refusal ladder (8) $\,\cdot\,$ formatting (3) $\,\cdot\,$ uncertainty (1)};
+
+% Verdict fusion
+\node[fusion, below=4mm of l4] (fuse) {%
+  \textbf{Verdict fusion}\\
+  7 mutually exclusive states + confidence band};
+
+% Output
+\node[output, below=4mm of fuse] (out) {%
+  IdentityAssessment \{ verdict, riskFlags, evidence, confidence \}};
+
+% Arrows
+\draw[arrow] (input.south) -- ++(0,-2mm) -| (l1.north);
+\draw[arrow] (input.south) -- ++(0,-2mm) -| (l2.north);
+\draw[arrow] (l1.south) -- ++(0,-2mm) -| ([xshift=-22mm]l3.north);
+\draw[arrow] (l2.south) -- ++(0,-2mm) -| ([xshift=22mm]l3.north);
+\draw[arrow] (l3.south) -- (l4.north);
+\draw[arrow] (l4.south) -- (fuse.north);
+\draw[arrow] (fuse.south) -- (out.north);
+
+% Side annotations
+\node[label, right=2mm of l1, anchor=west, text width=20mm] {polluted by self-claim};
+\node[label, left=2mm of l2, anchor=east, text width=20mm] {robust to prompt-layer attack};
+\node[label, right=2mm of l3, anchor=west, text width=20mm] {can be precisely targeted};
+\node[label, right=2mm of l4, anchor=west, text width=20mm] {policy-baked, hard to forge};
+
+\end{tikzpicture}
+\caption{The four-layer independent-fingerprint detection architecture (\S\ref{sec:method}).
+Each layer uses an independent signal channel; an adversary must simultaneously forge
+consistent behavior across multiple channels to escape detection. The verdict fusion
+emits one of seven mutually exclusive states with a confidence band.}
+\label{fig:architecture}
+\end{figure}
