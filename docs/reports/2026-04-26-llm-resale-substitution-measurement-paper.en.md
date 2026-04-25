@@ -2,7 +2,7 @@
 ## A 14-Day, 171-Endpoint, 625-Probe Empirical Measurement Study
 
 **Paper ID:** `OR-2026-04-26-resale-substitution`
-**Affiliation:** OpenRouterati Research (internal report, publishable version)
+**Affiliation:** Bazaarlink Research (internal report, publishable version)
 **Measurement Window:** 2026-04-12 – 2026-04-25 (14 calendar days)
 **Manuscript Version:** v1.0 (2026-04-26)
 **Classification:** consumer protection · security measurement · API economics

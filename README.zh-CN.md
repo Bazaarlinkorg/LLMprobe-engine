@@ -17,7 +17,7 @@
 
 > **黑箱大语言模型 API 中转市场的模型注水现象 — 一项 14 天、171 端点、625 次探测的实证测量研究**
 > *Model Substitution in the Black-Box LLM API Resale Market — A 14-Day, 171-Endpoint, 625-Probe Empirical Measurement Study*
-> 2026-04-26 · OpenRouterati Research
+> 2026-04-26 · Bazaarlink Research
 
 **📄 全文（双语对等版本）**
 

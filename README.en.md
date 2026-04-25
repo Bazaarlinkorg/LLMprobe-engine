@@ -17,7 +17,7 @@ This tool's detection methodology is published as:
 
 > **Model Substitution in the Black-Box LLM API Resale Market — A 14-Day, 171-Endpoint, 625-Probe Empirical Measurement Study**
 > *(Traditional Chinese: 黑箱大語言模型 API 中轉市場的模型注水現象)*
-> 2026-04-26 · OpenRouterati Research
+> 2026-04-26 · Bazaarlink Research
 
 **📄 Full text (parallel bilingual editions)**
 

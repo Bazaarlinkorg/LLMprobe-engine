@@ -4,7 +4,7 @@
 **A Measurement Study of Model Substitution in LLM API Resale Endpoints**
 
 **Paper ID:** `OR-2026-04-26-resale-substitution`
-**作者單位:** OpenRouterati 研究團隊（內部報告，可發布版）
+**作者單位:** Bazaarlink 研究團隊（內部報告，可發布版）
 **測量期間:** 2026-04-12 — 2026-04-25（14 個自然日）
 **稿件版本:** v1.0（2026-04-26）
 **分類:** 消費者保護 / 安全測量 / API 經濟學
