@@ -2,7 +2,7 @@
 // src/index.ts — Public API for @bazaarlink/probe-engine (MIT)
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UNIQUENESS_BOOST_PER_MATCH = exports.uniquenessBoost = exports.buildUniquenessMap = exports.TIE_BREAK_GAP = exports.getAllFamilies = exports.getBaselinesForFamily = exports.V3_BASELINES = exports.verifyPairwiseUniqueness = exports.lengthScoreLogGaussian = exports.implyFamilyV3 = exports.extractV3Refusal = exports.extractV3Capability = exports.extractV3Cutoff = exports.extractV3Features = exports.scoreExtractedFeatures = exports.classifySubmodelV3 = exports.V3_HIGH_CONFIDENCE = exports.computeVerdict = exports.matchSubModels = exports.flattenSubModelSignals = exports.flattenFeatures = exports.resolveJudgeConfig = exports.parseJudgeThreshold = exports.runCanary = exports.scoreCanaryAnswer = exports.CANARY_BENCH = exports.fuseScores = exports.pickTopVectorScores = exports.embedProbeResponses = exports.cosineSimilarity = exports.judgeFingerprint = exports.verifySignatureRoundtrip = exports.extractThinkingBlock = exports.classifyChannelSignature = exports.claimedModelToFamily = exports.FAMILY_BASELINES = exports.deriveVerdictFromClaimedModel = exports.deriveVerdict = exports.matchCandidates = exports.extractFingerprint = exports.runContextCheck = exports.checkSSECompliance = exports.TOKEN_INFLATION_THRESHOLD = exports.detectTokenInflation = exports.classifyPreflightResult = exports.computeProbeScore = exports.generateCanary = exports.autoScore = exports.PROBE_SUITE = exports.runProbes = void 0;
-exports.hasUsableLingData = exports.shouldAbstainSubModel = exports.UNIQUENESS_BOOST_CAP = void 0;
+exports.clearV3ECache = exports.getCachedV3EBaselines = exports.setV3EBaselines = exports.loadV3EBaselinesFromSnapshot = exports.scoreV3FMatch = exports.classifySubmodelV3F = exports.DEFAULT_V3E_WEIGHTS = exports.extractUncertainty = exports.extractFormatting = exports.extractRefusalLadder = exports.scoreV3EMatch = exports.classifySubmodelV3E = exports.hasUsableLingData = exports.shouldAbstainSubModel = exports.UNIQUENESS_BOOST_CAP = void 0;
 var runner_js_1 = require("./runner.js");
 Object.defineProperty(exports, "runProbes", { enumerable: true, get: function () { return runner_js_1.runProbes; } });
 var probe_suite_js_1 = require("./probe-suite.js");
@@ -87,4 +87,23 @@ var submodel_abstain_js_1 = require("./submodel-abstain.js");
 Object.defineProperty(exports, "shouldAbstainSubModel", { enumerable: true, get: function () { return submodel_abstain_js_1.shouldAbstainSubModel; } });
 var identity_phase_gate_js_1 = require("./identity-phase-gate.js");
 Object.defineProperty(exports, "hasUsableLingData", { enumerable: true, get: function () { return identity_phase_gate_js_1.hasUsableLingData; } });
+// ── v0.7.0: Layer ④ — Behavioral-Vector Extension (V3E + V3F) ─────────────
+// Refusal-boundary ladder + formatting + uncertainty channels for same-family
+// sibling discrimination. See paper §3.6 in
+// docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md.
+var sub_model_classifier_v3e_js_1 = require("./sub-model-classifier-v3e.js");
+Object.defineProperty(exports, "classifySubmodelV3E", { enumerable: true, get: function () { return sub_model_classifier_v3e_js_1.classifySubmodelV3E; } });
+Object.defineProperty(exports, "scoreV3EMatch", { enumerable: true, get: function () { return sub_model_classifier_v3e_js_1.scoreV3EMatch; } });
+Object.defineProperty(exports, "extractRefusalLadder", { enumerable: true, get: function () { return sub_model_classifier_v3e_js_1.extractRefusalLadder; } });
+Object.defineProperty(exports, "extractFormatting", { enumerable: true, get: function () { return sub_model_classifier_v3e_js_1.extractFormatting; } });
+Object.defineProperty(exports, "extractUncertainty", { enumerable: true, get: function () { return sub_model_classifier_v3e_js_1.extractUncertainty; } });
+Object.defineProperty(exports, "DEFAULT_V3E_WEIGHTS", { enumerable: true, get: function () { return sub_model_classifier_v3e_js_1.DEFAULT_V3E_WEIGHTS; } });
+var sub_model_classifier_v3f_js_1 = require("./sub-model-classifier-v3f.js");
+Object.defineProperty(exports, "classifySubmodelV3F", { enumerable: true, get: function () { return sub_model_classifier_v3f_js_1.classifySubmodelV3F; } });
+Object.defineProperty(exports, "scoreV3FMatch", { enumerable: true, get: function () { return sub_model_classifier_v3f_js_1.scoreV3FMatch; } });
+var sub_model_baselines_v3e_store_js_1 = require("./sub-model-baselines-v3e-store.js");
+Object.defineProperty(exports, "loadV3EBaselinesFromSnapshot", { enumerable: true, get: function () { return sub_model_baselines_v3e_store_js_1.loadV3EBaselinesFromSnapshot; } });
+Object.defineProperty(exports, "setV3EBaselines", { enumerable: true, get: function () { return sub_model_baselines_v3e_store_js_1.setV3EBaselines; } });
+Object.defineProperty(exports, "getCachedV3EBaselines", { enumerable: true, get: function () { return sub_model_baselines_v3e_store_js_1.getCachedV3EBaselines; } });
+Object.defineProperty(exports, "clearV3ECache", { enumerable: true, get: function () { return sub_model_baselines_v3e_store_js_1.clearV3ECache; } });
 //# sourceMappingURL=index.js.map

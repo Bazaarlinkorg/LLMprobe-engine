@@ -5,6 +5,8 @@
 An open-source CLI tool and Node.js library for testing OpenAI-compatible API endpoints.  
 Runs a suite of quality, security, and integrity probes and generates a 0–100 score report.
 
+> **v0.7.0** (2026-04-26): Adds Layer ④ (V3E / V3F) — the behavioral-vector extension classifier introduced in our measurement paper. 12 new V3E probes spanning a refusal-boundary ladder (8), formatting idiosyncrasy (3), and calibrated uncertainty (1); ships with an offline baseline snapshot for 22 frontier models (Anthropic / OpenAI / Google / DeepSeek). See the companion paper at [`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.en.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.en.md) (English) / [`.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md) (Traditional Chinese).
+>
 > **v0.6.0**: Added 26 probes (Identity linguistic fingerprint directions C–G × 18, Sub-Model identification group × 8), new Sub-Model V3 discriminators (`submodel_cutoff` / `submodel_capability` / `submodel_refusal`), new `fingerprint-features-v2` / `fingerprint-build-helpers` modules.
 
 ---

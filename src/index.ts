@@ -102,3 +102,38 @@ export { shouldAbstainSubModel } from "./submodel-abstain.js";
 export type { AbstainInput } from "./submodel-abstain.js";
 
 export { hasUsableLingData } from "./identity-phase-gate.js";
+
+// ── v0.7.0: Layer ④ — Behavioral-Vector Extension (V3E + V3F) ─────────────
+// Refusal-boundary ladder + formatting + uncertainty channels for same-family
+// sibling discrimination. See paper §3.6 in
+// docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md.
+
+export {
+  classifySubmodelV3E,
+  scoreV3EMatch,
+  extractRefusalLadder,
+  extractFormatting,
+  extractUncertainty,
+  DEFAULT_V3E_WEIGHTS,
+} from "./sub-model-classifier-v3e.js";
+export type {
+  V3EObserved,
+  V3EMatch,
+  V3EOutput,
+  V3EWeights,
+  RefusalLadderFeatures,
+  FormattingFeatures,
+  UncertaintyFeatures,
+} from "./sub-model-classifier-v3e.js";
+
+export { classifySubmodelV3F, scoreV3FMatch } from "./sub-model-classifier-v3f.js";
+export type { V3FMatch, V3FOutput } from "./sub-model-classifier-v3f.js";
+
+export type { SubmodelBaselineV3E, V3EBaselineSnapshot } from "./sub-model-baselines-v3e.js";
+
+export {
+  loadV3EBaselinesFromSnapshot,
+  setV3EBaselines,
+  getCachedV3EBaselines,
+  clearV3ECache,
+} from "./sub-model-baselines-v3e-store.js";

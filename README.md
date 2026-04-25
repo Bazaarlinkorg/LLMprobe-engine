@@ -5,6 +5,8 @@
 針對 OpenAI-compatible API 端點的開源 CLI 測試工具與 Node.js 函式庫。  
 執行品質、安全性、完整性、身份識別探針，產出 0–100 評分報告。
 
+> **v0.7.0** (2026-04-26)：新增方法層 **層④（V3E / V3F）行為向量擴展分類器** — 拒絕梯度（8 探針）、格式偏好（3 探針）、數值不確定性（1 探針）共 12 個新 V3E 探針；附帶 22 個熱門模型的離線 baseline 快照（Anthropic / OpenAI / Google / DeepSeek 旗艦線）。完整方法論與實證測量見論文 [`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md)（中文版）/ [`.en.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.en.md)（英文版）。
+>
 > **v0.6.0**：新增 26 個探針（Identity 語言指紋 C–G 方向 × 18 個、Sub-Model 子模型識別組 × 8 個）、新增 Sub-Model V3 三探針（`submodel_cutoff` / `submodel_capability` / `submodel_refusal`）、新增 `fingerprint-features-v2` / `fingerprint-build-helpers` 模組
 
 ---
