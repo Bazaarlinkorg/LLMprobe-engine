@@ -19,7 +19,12 @@ This tool's detection methodology is published as:
 > *(Traditional Chinese: 黑箱大語言模型 API 中轉市場的模型注水現象)*
 > 2026-04-26 · Bazaarlink Research
 
-**📄 Full text (parallel bilingual editions)**
+**📄 arXiv preprint edition (recommended; with formal references, prior-work alignment to Liu et al. 2604.08407, IRB self-assessment)**
+
+- 🇬🇧 English: [`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.arxiv.en.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.arxiv.en.md)
+- 🇹🇼 Traditional Chinese: [`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.arxiv.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.arxiv.md)
+
+**📄 Full empirical edition (with complete endpoint mapping appendix and experimental details)**
 
 - 🇬🇧 English: [`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.en.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.en.md)
 - 🇹🇼 Traditional Chinese: [`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md)

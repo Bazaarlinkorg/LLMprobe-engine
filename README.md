@@ -19,7 +19,12 @@
 > *Model Substitution in the Black-Box LLM API Resale Market — A 14-Day, 171-Endpoint, 625-Probe Empirical Measurement Study*
 > 2026-04-26 · Bazaarlink Research
 
-**📄 全文（雙語對等版本）**
+**📄 arXiv preprint 版本（建議閱讀，含 formal references、Liu et al. 2604.08407 prior-work 對位、IRB 自評）**
+
+- 🇹🇼 繁體中文：[`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.arxiv.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.arxiv.md)
+- 🇬🇧 English: [`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.arxiv.en.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.arxiv.en.md)
+
+**📄 完整實證版本（含完整端點對應表、實驗附錄）**
 
 - 🇹🇼 繁體中文：[`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md)
 - 🇬🇧 English: [`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.en.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.en.md)
