@@ -11,6 +11,38 @@
 
 ---
 
+## 研究方法论依据（Research Paper）
+
+本工具的检测方法已发表于：
+
+> **黑箱大语言模型 API 中转市场的模型注水现象 — 一项 14 天、171 端点、625 次探测的实证测量研究**
+> *Model Substitution in the Black-Box LLM API Resale Market — A 14-Day, 171-Endpoint, 625-Probe Empirical Measurement Study*
+> 2026-04-26 · OpenRouterati Research
+
+**📄 全文（双语对等版本）**
+
+- 🇨🇳 简体中文：直接阅读繁中版本即可（用语略有差异，技术内容一致）—— [`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md)
+- 🇬🇧 English: [`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.en.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.en.md)
+
+**论文涵盖**
+
+- §3 四层独立指纹检测方法 — 本套件对应 ①②③④ 全部四层
+- §5 14 天 / 171 中转端点 / 625 探测 / 47 种宣称模型的实地测量数据
+- §6 五大伪装型态分类学（跨家族冒充 / 同家族静默降级 / 同家族静默升级 / 版本标签造假 / 提供商行为注入）+ R1 / R2 / R6 深度案例研究
+- §7 消费者保护与政策意涵分析（D1 / D2 / D3 披露义务建议）
+- 附录 C — 开源实作对应与本 v0.7.x 重现指引
+
+**主结论摘要**
+
+| 指标 | 数值 |
+|---|---:|
+| 同家族伪装检测（合成测试） | 94.4% TP / 0% FP（n=18+6） |
+| 端点层级违规率（严格门槛：n≥5、≥20%） | 1.3% (2/149) |
+| 端点层级违规率（放宽门槛：n≥1、≥1 次违规） | 9.9% (17/171) |
+| 探测单次成本 | ~$0.003 USD（judge 端） |
+
+---
+
 ## 快速开始
 
 ### 第一步 — 查询可用的 Baseline 模型 ID

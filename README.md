@@ -11,6 +11,38 @@
 
 ---
 
+## 研究方法論依據（Research Paper）
+
+本工具的偵測方法已發表於：
+
+> **黑箱大語言模型 API 中轉市場的模型注水現象 — 一項 14 天、171 端點、625 次探測的實證測量研究**
+> *Model Substitution in the Black-Box LLM API Resale Market — A 14-Day, 171-Endpoint, 625-Probe Empirical Measurement Study*
+> 2026-04-26 · OpenRouterati Research
+
+**📄 全文（雙語對等版本）**
+
+- 🇹🇼 繁體中文：[`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md)
+- 🇬🇧 English: [`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.en.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.en.md)
+
+**論文涵蓋**
+
+- §3 四層獨立指紋偵測方法 — 本套件對應 ①②③④ 全部四層
+- §5 14 天 / 171 中轉端點 / 625 探測 / 47 種宣稱模型的實地測量數據
+- §6 五大偽裝型態分類學（跨家族冒充 / 同家族靜默降級 / 同家族靜默升級 / 版本標籤造假 / 提供商行為注入）+ R1 / R2 / R6 深度案例研究
+- §7 消費者保護與政策意涵分析（D1 / D2 / D3 揭露義務建議）
+- 附錄 C — 開源實作對應與本 v0.7.x 重現指引
+
+**主結論摘要**
+
+| 指標 | 數值 |
+|---|---:|
+| 同家族偽裝偵測（合成測試） | 94.4% TP / 0% FP（n=18+6） |
+| 端點層級違規率（嚴格門檻：n≥5、≥20%） | 1.3% (2/149) |
+| 端點層級違規率（放寬門檻：n≥1、≥1 次違規） | 9.9% (17/171) |
+| 探測單次成本 | ~$0.003 USD（judge 端） |
+
+---
+
 ## 快速開始
 
 ### 第一步 — 查詢可用的 Baseline 模型 ID

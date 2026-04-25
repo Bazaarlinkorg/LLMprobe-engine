@@ -11,6 +11,38 @@ Runs a suite of quality, security, and integrity probes and generates a 0–100 
 
 ---
 
+## Research Paper
+
+This tool's detection methodology is published as:
+
+> **Model Substitution in the Black-Box LLM API Resale Market — A 14-Day, 171-Endpoint, 625-Probe Empirical Measurement Study**
+> *(Traditional Chinese: 黑箱大語言模型 API 中轉市場的模型注水現象)*
+> 2026-04-26 · OpenRouterati Research
+
+**📄 Full text (parallel bilingual editions)**
+
+- 🇬🇧 English: [`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.en.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.en.md)
+- 🇹🇼 Traditional Chinese: [`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md)
+
+**Paper covers**
+
+- §3 The four-layer independent-fingerprint detection method — this package implements all four layers ①②③④
+- §5 14-day / 171-endpoint / 625-probe / 47 claimed-model field measurement
+- §6 Five-category substitution taxonomy (cross-family impersonation / silent downgrade / silent upgrade / version-tag forgery / provider behavior injection) + deep case studies for R1 / R2 / R6
+- §7 Consumer-protection and policy implications (D1 / D2 / D3 disclosure-duty proposals)
+- Appendix C — open-source implementation correspondence and reproduction guide for this v0.7.x release
+
+**Headline findings**
+
+| Metric | Value |
+|---|---:|
+| Intra-family substitution detection (synthetic) | 94.4% TP / 0% FP (n=18+6) |
+| Persistent-substitution endpoints (strict: n≥5, ≥20% rate) | 1.3% (2/149) |
+| Endpoints with at least one violation (n≥1) | 9.9% (17/171) |
+| Per-probe cost (judge side) | ~$0.003 USD |
+
+---
+
 ## Quick Start
 
 ### Step 1 — Find your baseline model ID
