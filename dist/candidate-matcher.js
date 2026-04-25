@@ -15,7 +15,13 @@ function matchCandidates(features) {
         let raw = 0;
         const reasons = [];
         for (const [category, key, weight] of baseline.signals) {
-            const value = features[category][key] ?? 0;
+            // Some baseline signals reference feature categories that may be absent
+            // when the caller supplies a partial FingerprintFeatureSet (e.g. unit
+            // tests that mock only the rule-based categories, or extractor stages
+            // that haven't run a particular fingerprint family yet). Treat absent
+            // categories as zero rather than throwing.
+            const cat = features[category];
+            const value = cat?.[key] ?? 0;
             if (value === 0)
                 continue;
             raw += weight * value;
