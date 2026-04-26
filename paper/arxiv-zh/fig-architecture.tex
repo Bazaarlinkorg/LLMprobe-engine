@@ -1,9 +1,10 @@
-% fig-architecture.tex — Figure 1: Four-layer detection architecture
-% Self-contained TikZ figure. Compile with pdflatex/xelatex/lualatex.
-% Used by main.tex via \input{fig-architecture}.
+% fig-architecture.tex — 圖 1：四層偵測架構（繁體中文版）
+% 自包含的 TikZ 圖。以 xelatex 編譯。
+% 由 main.tex 透過 \input{fig-architecture} 引入。
 
-\begin{figure}[t]
+\begin{figure*}[t]
 \centering
+\resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
   node distance=4mm and 6mm,
   every node/.style={font=\small},
@@ -32,36 +33,36 @@
   label/.style={font=\scriptsize\itshape, gray!50!black},
 ]
 
-% Top: input
-\node[input] (input) {Probe responses from \texttt{(baseUrl, model, key)}};
+% 上方：輸入
+\node[input] (input) {來自 \texttt{(baseUrl, model, key)} 的探測響應};
 
-% Layer 1 + Layer 2 side by side
+% 層 1 + 層 2 並排
 \node[surface, below left=10mm and 0mm of input] (l1) {%
-  \textbf{Layer \textcircled{\scriptsize 1}}\\Surface fingerprint\\(family weights)};
+  \textbf{層 \textcircled{\scriptsize 1}}\\表面指紋\\（族別權重）};
 \node[behavior, below right=10mm and 0mm of input] (l2) {%
-  \textbf{Layer \textcircled{\scriptsize 2}}\\Behavior column\\(self-claim zeroed)};
+  \textbf{層 \textcircled{\scriptsize 2}}\\行為對照\\（自我宣告歸零）};
 
-% Layer 3 below
+% 層 3
 \node[v3, below=10mm of input, yshift=-22mm] (l3) {%
-  \textbf{Layer \textcircled{\scriptsize 3}} \quad Sub-model deterministic match\\
-  cutoff $\,\cdot\,$ capability $\,\cdot\,$ refusal-prefix};
+  \textbf{層 \textcircled{\scriptsize 3}} \quad 子模型確定性匹配\\
+  截止日期 $\,\cdot\,$ 能力邊界 $\,\cdot\,$ 拒絕前綴};
 \path (l3.west) -- node[layer, minimum width=88mm, draw=none, fill=none] {} (l3.east);
 
-% Layer 4 below
+% 層 4
 \node[v3e, below=4mm of l3] (l4) {%
-  \textbf{Layer \textcircled{\scriptsize 4}} \quad Behavioral-vector extension\\
-  refusal ladder (8) $\,\cdot\,$ formatting (3) $\,\cdot\,$ uncertainty (1)};
+  \textbf{層 \textcircled{\scriptsize 4}} \quad 行為向量擴展\\
+  拒絕梯度 (8) $\,\cdot\,$ 格式偏好 (3) $\,\cdot\,$ 數值不確定性 (1)};
 
-% Verdict fusion
+% 判決融合
 \node[fusion, below=4mm of l4] (fuse) {%
-  \textbf{Verdict fusion}\\
-  7 mutually exclusive states + confidence band};
+  \textbf{判決融合}\\
+  7 種互斥狀態 + 置信區間};
 
-% Output
+% 輸出
 \node[output, below=4mm of fuse] (out) {%
   IdentityAssessment \{ verdict, riskFlags, evidence, confidence \}};
 
-% Arrows
+% 連線
 \draw[arrow] (input.south) -- ++(0,-2mm) -| (l1.north);
 \draw[arrow] (input.south) -- ++(0,-2mm) -| (l2.north);
 \draw[arrow] (l1.south) -- ++(0,-2mm) -| ([xshift=-22mm]l3.north);
@@ -70,16 +71,16 @@
 \draw[arrow] (l4.south) -- (fuse.north);
 \draw[arrow] (fuse.south) -- (out.north);
 
-% Side annotations
-\node[label, right=2mm of l1, anchor=west, text width=20mm] {polluted by self-claim};
-\node[label, left=2mm of l2, anchor=east, text width=20mm] {robust to prompt-layer attack};
-\node[label, right=2mm of l3, anchor=west, text width=20mm] {can be precisely targeted};
-\node[label, right=2mm of l4, anchor=west, text width=20mm] {policy-baked, hard to forge};
+% 側註
+\node[label, right=2mm of l1, anchor=west, text width=24mm] {易受自我宣告污染};
+\node[label, left=2mm of l2, anchor=east, text width=24mm] {對提示層攻擊穩健};
+\node[label, right=2mm of l3, anchor=west, text width=24mm] {可被精準針對};
+\node[label, right=2mm of l4, anchor=west, text width=24mm] {政策固化、難以偽造};
 
-\end{tikzpicture}
-\caption{The four-layer independent-fingerprint detection architecture (\S\ref{sec:method}).
-Each layer uses an independent signal channel; an adversary must simultaneously forge
-consistent behavior across multiple channels to escape detection. The verdict fusion
-emits one of seven mutually exclusive states with a confidence band.}
+\end{tikzpicture}%
+}
+\caption{四層獨立指紋偵測架構（\S\ref{sec:method}）。每一層使用獨立的訊號通道；
+攻擊者必須跨多個通道同時偽造一致行為才能逃過偵測。判決融合產出七種互斥狀態之一,
+並附以置信區間。}
 \label{fig:architecture}
-\end{figure}
+\end{figure*}

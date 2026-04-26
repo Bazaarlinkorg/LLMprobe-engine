@@ -2,8 +2,9 @@
 % Self-contained TikZ figure. Compile with pdflatex/xelatex/lualatex.
 % Used by main.tex via \input{fig-architecture}.
 
-\begin{figure}[t]
+\begin{figure*}[t]
 \centering
+\resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
   node distance=4mm and 6mm,
   every node/.style={font=\small},
@@ -76,10 +77,11 @@
 \node[label, right=2mm of l3, anchor=west, text width=20mm] {can be precisely targeted};
 \node[label, right=2mm of l4, anchor=west, text width=20mm] {policy-baked, hard to forge};
 
-\end{tikzpicture}
+\end{tikzpicture}%
+}
 \caption{The four-layer independent-fingerprint detection architecture (\S\ref{sec:method}).
 Each layer uses an independent signal channel; an adversary must simultaneously forge
 consistent behavior across multiple channels to escape detection. The verdict fusion
 emits one of seven mutually exclusive states with a confidence band.}
 \label{fig:architecture}
-\end{figure}
+\end{figure*}

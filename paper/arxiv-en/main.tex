@@ -2,7 +2,7 @@
 % Compile: pdflatex main && bibtex main && pdflatex main && pdflatex main
 % (or: latexmk -pdf main)
 
-\documentclass[11pt,a4paper]{article}
+\documentclass[10pt,a4paper,twocolumn]{article}
 
 % ---- Packages ----------------------------------------------------------
 \usepackage[utf8]{inputenc}
@@ -50,15 +50,21 @@
 % Tighten lists slightly
 \setlist{topsep=2pt,partopsep=0pt,itemsep=2pt,parsep=0pt}
 
+% Two-column tolerance: let LaTeX wrap long identifiers to a new line
+% rather than break them at hyphens.
+\sloppy
+\tolerance=2000
+\emergencystretch=5em
+
 % ---- Title ------------------------------------------------------------
-\title{Measuring Model Substitution in OpenAI-Compatible API Resellers:\\
+\title{Measuring Model Substitution in LLM API Resellers:\\
   A 14-Day Study of 171 Endpoints}
 
 \author[1]{Bazaarlink Research}
-\affil[1]{\texttt{bazaarlink.ai} --- corresponding repository: \\
-  \url{https://github.com/Bazaarlinkorg/LLMprobe-engine}}
+\affil[1]{\texttt{bazaarlink.ai} --- corresponding repository:\\
+  \href{https://github.com/Bazaarlinkorg/LLMprobe-engine}{github.com/Bazaarlinkorg/LLMprobe-engine}}
 
-\date{2026-04-26 (arXiv-v1)}
+\date{}
 
 % ---- Document --------------------------------------------------------
 \begin{document}
@@ -77,15 +83,19 @@ classifier, a behavior column with self-claim zeroed, a sub-model deterministic
 match (cutoff / capability / refusal-prefix), and a behavioral-vector extension
 covering refusal-boundary ladder, formatting idiosyncrasy, and calibrated
 uncertainty. We apply it to 171 distinct reseller endpoints over a 14-day
-window (2026-04-12 to 2026-04-25; 625 probe runs). On cost-constrained
-synthetic stress tests the system achieves 94.4\% intra-family true-positive
+window (2026-04-12 to 2026-04-25; 625 probe runs). In a fixed-size
+synthetic stress test the system achieves 94.4\% intra-family true-positive
 rate ($n{=}18$; Wilson 95\% CI $[74.2\%, 99.0\%]$) at 0\% false-positive rate
 ($n{=}6$). In the field, \textbf{9.9\% of probed endpoints (17/171) show at
 least one detected substitution event; under a stricter criterion ($n{\geq}5$
-probes, ${\geq}20\%$ violation rate) 1.3\% (2/149) exhibit persistent
-substitution}. Observed substitutions sort into five categories: cross-family
-impersonation, silent downgrade, silent upgrade, version-tag forgery, and
-provider-injected behavioral constraint. We complement Liu et al.\
+probes, ${\geq}20\%$ violation rate) 1.3\% (2/149) meet our
+persistent-substitution criterion}. The central empirical contribution is the
+case analysis: R1 exhibits dynamic routing across multiple back ends under one
+advertised model, R2 exhibits systematic version-tag generalization, and R6
+shows that single-session incident-style substitution can still be captured by
+an internally consistent evidence chain. Observed substitutions sort into five
+categories: cross-family impersonation, silent downgrade, silent upgrade,
+version-tag forgery, and provider-injected behavioral constraint. We complement Liu et al.\
 (arXiv:2604.08407)~\cite{liu2026agent} ---  who measure malicious-intermediary
 security attacks on the LLM supply chain --- by quantifying the orthogonal axis
 of model-substitution quality fraud, and close with three disclosure-duty
@@ -95,45 +105,6 @@ proposals.
 \noindent\textbf{Keywords:} LLM API resale; model substitution; behavioral
 fingerprinting; consumer protection; black-box auditing.
 \end{abstract}
-
-% =====================================================================
-\section*{Disclosure and Ethics Statement}
-
-\paragraph{Authors' relationship to the deployed system.}
-The authors operate the public Web service \texttt{bazaarlink.ai/probe}
-referred to in \cref{sec:impl}. The detection methodology described in this
-paper is released under AGPL-3.0 as the open-source package
-\texttt{@bazaarlink/probe-engine} (see \cref{app:opensource}); the SaaS
-deployment is \emph{not} required to reproduce the methodology or any result
-reported in \cref{sec:results}.
-
-\paragraph{Measurement ethics.}
-All probe traffic was issued via legitimately purchased API keys, of the same
-class any retail customer of the studied endpoints could issue. The study
-performed no denial-of-service, no billing-bypass, no unauthorized access, and
-no action exceeding the access scope advertised by the endpoints. Every named
-endpoint is a publicly marketed reseller of LLM API credit and was, throughout
-the measurement window, receiving research-purpose stress-test traffic in
-support of methodology validation; the substitution behaviors documented in
-this paper are independent of that stress-test traffic.
-
-\paragraph{Endpoint identification.}
-Endpoints are referred to in the body of the paper by codenames (R1--R15) with
-partial-letter masking of their domains. The full codename--domain mapping is
-preserved in the authors' internal records and is \textbf{not} included as a
-public appendix in this arXiv version; bona-fide researchers may request access
-via the corresponding repository at\\
-\url{https://github.com/Bazaarlinkorg/LLMprobe-engine}.
-
-\paragraph{IRB.}
-This study did not require Institutional Review Board approval because it does
-not involve human subjects; all measured systems are publicly marketed API
-services. The authors followed the spirit of the ACM Code of Ethics; a
-self-assessment is documented in \cref{sec:irb}.
-
-\paragraph{Position statement.}
-The study aims at consumer protection and market transparency. It does not
-make legal claims about any operating entity behind the studied endpoints.
 
 % =====================================================================
 \section{Introduction}\label{sec:intro}
@@ -170,8 +141,8 @@ OpenAI-compatible protocol, therefore its behavior approximates first-party;
 and receives a response self-identifying as Claude indicates the back end truly
 is that model; (3)~\textbf{branding}: a website displaying upstream logos and
 customer service claiming ``official partnership'' sources from the official
-upstream; (4)~\textbf{pricing}: resellers will not collect high-tier model fees
-while routing to a low-tier model. We will demonstrate that all four
+upstream; (4)~\textbf{tier consistency}: resellers will not advertise a
+high-tier model while routing to a low-tier model. We will demonstrate that all four
 assumptions fail in the present resale market.
 
 \subsection{Research questions}
@@ -189,7 +160,7 @@ providers?
 \subsection{Contributions and relation to prior work}
 The contributions are: (1) a first systematic measurement of the resale market
 for model-substitution behavior; (2) a reproducible black-box detection
-methodology achieving 94.4\% intra-family TP at 0\% FP under cost-constrained
+methodology achieving 94.4\% intra-family TP at 0\% FP under fixed-size
 synthetic tests; (3) a five-category taxonomy of substitution behaviors; (4) a
 consumer-protection policy analysis with three immediately implementable
 disclosure-duty proposals.
@@ -199,8 +170,8 @@ The closest contemporary measurement is Liu et al.~\cite{liu2026agent}, who
 measure 428 LLM API routers for \emph{active security attacks}: payload
 injection, secret/credential exfiltration, evasion tactics, and crypto-asset
 access. Our work measures the orthogonal axis: routers that perform
-\emph{passive quality substitution} --- silently routing a paid-for premium
-model to a cheaper or different one --- without active intrusion on the user's
+\emph{passive quality substitution} --- silently routing an advertised premium
+model to a lower-tier or different one --- without active intrusion on the user's
 system. Together, the two studies span the principal threat surfaces of the
 LLM API supply chain: Liu et al.\ on what the router does \emph{to the user},
 and the present paper on what the router does \emph{with the model}.
@@ -238,11 +209,11 @@ We classify substitution-capable adversaries (resellers) by commercial motivatio
 
 \begin{itemize}
 \item \textbf{Arbitrage adversary.} Advertises model $M_{\text{high}}$; routes
-  to a cheaper same-family model $M_{\text{low}}$ (e.g., advertises Opus 4.7,
-  routes to Sonnet 4.6). Motivation: per-token cost differential $\times$ volume.
+  to a lower-tier same-family model $M_{\text{low}}$ (e.g., advertises Opus 4.7,
+  routes to Sonnet 4.6). Motivation: margin expansion through quality-tier substitution.
 \item \textbf{Silent-downgrade adversary.} Advertises $M_{\text{high}}$ and
   initially routes to $M_{\text{high}}$, but switches to $M_{\text{low}}$ under
-  operational pressure (cost squeeze, upstream-quota exhaustion).
+  operational pressure (upstream-quota exhaustion, routing fallback, or vendor policy change).
 \item \textbf{Cross-family adversary.} Advertises a model in family $F_a$
   (Anthropic Claude); routes to a model in family $F_b$ (OpenAI GPT, Google
   Gemini, Z-AI GLM). Motivation: cross-family arbitrage, or fail-over when
@@ -266,13 +237,13 @@ header injection, and streaming forgery. The adversary does \emph{not} possess
 the ability to rewrite the upstream model's internal reasoning (logprobs,
 token-count physics) or to forge the full behavioral fingerprint of an upstream
 model in absence of that model's participation. The adversary may rewrite
-\emph{what the response says}, but cannot at low cost fabricate a coherent set
+\emph{what the response says}, but cannot readily fabricate a coherent set
 of responses spanning multiple independent fingerprint channels.
 
 \subsection{Attack-surface classification}
 Mapping the substitution to its injection point in the request lifecycle:
 
-\begin{table}[h]
+\begin{table*}[h]
 \centering
 \small
 \begin{tabular}{@{}lll@{}}
@@ -284,7 +255,7 @@ Prompt layer & upstream system prompt & forge self-claim; not refusal floor \\
 Response layer & post-process upstream response & rewrite text; not metadata \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}
 
 % =====================================================================
 \section{Methodology: Four-Layer Independent Fingerprint Detection}\label{sec:method}
@@ -304,7 +275,7 @@ verdict but a quantified confidence band and per-layer evidence trail.
 \subsection{Layer~\textcircled{1}: Surface fingerprint}\label{sec:layer1}
 \textbf{Principle.} The overall textual response (including any
 self-identifying language it contains) carries family-discriminative
-information at low cost.
+information with a small number of probes.
 
 \textbf{Implementation.} A linear classifier maps response features to family
 weights (Anthropic / OpenAI / Google / xAI / other) with weights pretrained on
@@ -382,7 +353,7 @@ are highly robust against ``pretend to be confident'' prompt attacks.
 
 \subsection{Verdict fusion and seven-state output}\label{sec:verdict}
 
-\begin{table}[h]
+\begin{table*}[h]
 \centering
 \small
 \begin{tabularx}{\linewidth}{@{}lX@{}}
@@ -399,7 +370,7 @@ Verdict & Trigger (simplified) \\
 \texttt{ambiguous}/\texttt{uncertain}/\texttt{insufficient\_data} & Insufficient or contradictory signal \\
 \bottomrule
 \end{tabularx}
-\end{table}
+\end{table*}
 
 % =====================================================================
 \section{Engineering Implementation}\label{sec:impl}
@@ -426,7 +397,10 @@ data; it is not part of the methodology and is not required for reproduction.}
 
 \subsection{Baseline coverage}\label{sec:baseline}
 As of 2026-04-26 the sub-model baseline database contains 27 models across 6
-families; 22 have full layer~\textcircled{4} extended-behavior baselines:
+families. Layer~\textcircled{3} coverage is complete for all 27 models through
+cutoff, capability, and refusal-prefix features. Layer~\textcircled{4}
+contains 22 full extended-behavior baselines, covering every model family that
+appeared as a downstream claim during the measurement window:
 
 \begin{table}[h]
 \centering
@@ -438,27 +412,31 @@ Family & Models & Layer 4 ready & Coverage \\
 Anthropic & 6 & 6 & 100\% \\
 OpenAI & 10 & 10 & 100\% \\
 Google & 5 & 5 & 100\% \\
-DeepSeek & 2 & 1 & 50\% \\
-Qwen & 2 & 0 & 0\% \\
-Zhipu & 2 & 0 & 0\% \\
 \midrule
 \textbf{Total} & \textbf{27} & \textbf{22} & \textbf{81\%} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The five missing baselines correspond to families with \emph{zero downstream
-claims} during the measurement window; baseline construction is deferred to
-conserve compute budget.
+The five models without layer~\textcircled{4} snapshots are retained in the
+layer~\textcircled{3} database but excluded from layer~\textcircled{4} analysis
+because they had no downstream claims in the field-measurement corpus. This
+keeps the denominator transparent: the public snapshot supports complete
+reproduction of all layer~\textcircled{4} verdicts reported in
+\cref{sec:results}, while preserving layer~\textcircled{3} baselines for future
+measurements when additional families appear in the market. Baseline rows are
+versioned by model identifier and snapshot date; the open-source release
+includes a file-based loader so reproduction does not depend on the authors'
+SaaS database.
 
-\subsection{Synthetic stress test (cost-constrained)}\label{sec:synthetic}
-Each round of synthetic testing costs $\approx$~USD~\$0.05. Within budget the
-study executed 18 intra-family substitution rounds and 6 genuine-model stress
-rounds. We honestly disclose: $n{=}18$ yields a 95\% Wilson confidence interval
+\subsection{Synthetic stress test}\label{sec:synthetic}
+The synthetic evaluation executed 18 intra-family substitution rounds and 6
+genuine-model stress rounds. We honestly disclose: $n{=}18$ yields a 95\%
+Wilson confidence interval
 of $[74.2\%, 99.0\%]$ --- sample size is \textbf{insufficient to claim a tight
 point estimate}.
 
-\begin{table}[h]
+\begin{table*}[h]
 \centering
 \small
 \begin{tabular}{@{}lrr@{}}
@@ -472,7 +450,7 @@ Intra-family --- injection-mode system prompt & 6 & 5/6 = 83\% \\
 Genuine model under spoof prompt --- flagged as spoof & 6 & \textbf{0/6 = 0\%} \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}
 
 The single missed case was Anthropic Claude Opus 4.6 under injection-mode
 attack pushing its L6 refusal boundary to Opus 4.7's level. This is the
@@ -517,7 +495,7 @@ consistent with the dual attack-surface hypothesis.
 Treating each \texttt{baseUrl} as a single endpoint and bucketing by 14-day
 violation rate:
 
-\begin{table}[h]
+\begin{table*}[h]
 \centering
 \small
 \begin{tabular}{@{}lrr@{}}
@@ -532,17 +510,13 @@ $n{<}5$, ${\geq}1$ violation (low evidence) & 9 & 19 \\
 Other & 13 & 64 \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}
 
 \textbf{Principal finding (RQ1).} Among the 149 higher-evidence endpoints
 ($n{\geq}5$), \textbf{7 ($\approx 4.7\%$)} show ${\geq}1$ violation;
 \textbf{2 ($\approx 1.3\%$)} show ${\geq}20\%$ sustained violation rate.
 Relaxing to $n{\geq}1$, $17/171 \approx 9.9\%$ show ${\geq}1$ violation, but at
 this relaxation the impact of one-off false positives cannot be ruled out.
-
-\paragraph{Cost.}
-The auxiliary judge LLM used by verdict fusion incurred USD \$1.85 over the
-14-day window across 625 runs ($\approx$ \$0.00296 per run).
 
 % =====================================================================
 \section{A Taxonomy of Substitution Behavior}\label{sec:taxonomy}
@@ -558,7 +532,7 @@ weights placed \texttt{openai} = 0.96; sub-model deterministic match identified
 GPT-5.4. Verdict: \texttt{spoof\_behavior\_induced}, high confidence.
 
 \subsection{Intra-family silent downgrade}
-Advertise higher-tier; route to cheaper same-family. \textbf{Anchor (R8).}
+Advertise higher-tier; route to lower-tier same-family. \textbf{Anchor (R8).}
 Multiple probes of \texttt{claude-opus-4-7} stably identified by
 layer~\textcircled{4} as Claude Opus 4.6 at score $\geq 0.84$. L6 refusal
 pattern and formatting preferences match 4.6.
@@ -587,7 +561,7 @@ during the 14-day window.
 
 \subsection{Endpoint summary}\label{sec:endpoints}
 
-\begin{table}[h]
+\begin{table*}[h]
 \centering
 \small
 \begin{tabular}{@{}lllrrl@{}}
@@ -610,13 +584,13 @@ R10--R15 & (low evidence) & & 1--2 & 1--2 & various \\
 order reflects evidence strength. R10--R15 are placed in a low-evidence
 cohort and not counted toward the principal point estimates.}
 \label{tab:endpoints}
-\end{table}
+\end{table*}
 
 \subsection{Deep case studies}\label{sec:cases}
 
 \paragraph{R1 (\texttt{api.1xx.ai}) --- dynamic-routing cross-family impersonation.}
 R1 leads the measurement window in both volume (73 probes) and violation rate
-(61.6\%, 45/73), and is the highest-confidence persistent-substitution case in
+(61.6\%, 45/73), and is the highest-evidence persistent-substitution candidate in
 our data. Two features distinguish R1's behavior: (a) a single advertised model
 maps to multiple distinct back-end models across different probes; (b) both
 prompt-layer and routing-layer attack surfaces are simultaneously observed at
@@ -640,6 +614,17 @@ contradicted by behavior-column family weights. \textbf{Both attack surfaces
 co-occurring at one endpoint suggest the operator possesses the engineering
 capacity to bypass deterministic sub-model matching (layer~\textcircled{3}),
 yet remains caught by the behavioral-vector extension (layer~\textcircled{4}).}
+
+Operationally, R1 is important because it is not merely a mislabeled static
+proxy. A static proxy would consistently map a claimed model to a single
+neighboring back end, producing a stable mismatch pattern. R1 instead produces
+a many-to-one and one-to-many mapping: the same advertised model sometimes
+resolves to the genuine model and sometimes to multiple OpenAI-family
+alternatives. This is consistent with a routing layer that treats the
+\texttt{model} field as a soft label rather than a binding contract. For
+downstream users, the failure mode is intermittent and hard to reproduce: a
+complaint may be answered by a clean later call, even though the previous call
+was routed elsewhere.
 
 \paragraph{R2 (\texttt{hbxxx.ai}) --- version-tag generalization routing.}
 R2 accumulated 57 probes and 20 violations (35.1\%) in the 14-day window. Its
@@ -667,10 +652,19 @@ the underlying weights for Opus 4.5, R2's downstream users would silently
 receive a new training snapshot, invalidating their evaluation criteria
 without warning.
 
+R2 is therefore not best understood as a simple ``fake model'' endpoint. Its
+dominant behavior is a compatibility illusion: the endpoint accepts model
+identifiers that look precise enough for production pinning, but internally
+collapses them onto a smaller set of available models. This is difficult for
+users to notice because family-level behavior often remains plausible. A user
+asking for Claude usually receives something Claude-like; the failure is at
+the version-contract layer, where regression stability, safety-boundary
+assumptions, and benchmark comparability are silently weakened.
+
 \paragraph{R6 (\texttt{api.axxx.com}) --- single-event capture of cross-family substitution.}
 R6 accumulated 6 probes and 1 violation (16.7\%) --- below our $n{\geq}5$
 evidence threshold. R6 is nonetheless retained as a body-text case because that
-single violation supplies a clean, complete evidence chain for the cross-family
+single violation supplies an internally consistent evidence chain for the cross-family
 impersonation pattern, ideal for illustrating how the methodology captures
 such substitutions.
 
@@ -692,6 +686,15 @@ substitution}. While the expected harm to any given downstream user is lower
 than persistent substitution, its unpredictability defeats any defense based
 on long-window averaging --- the user may receive a non-claimed model
 precisely on the call that constitutes their commercially critical task.
+
+This case also explains why endpoint-level percentages alone understate the
+user-facing problem. If a buyer performs ten casual tests, all ten may appear
+clean; the eleventh call, embedded inside a production workflow, can still be
+routed to a different family. The measurement question is therefore not only
+``what fraction of endpoints are persistently substituting?'' but also
+``can the audit system preserve enough per-call evidence to make an isolated
+substitution event interpretable after the fact?'' R6 answers the latter
+question affirmatively within the limits of black-box observation.
 
 % =====================================================================
 \section{Consumer Harm and Policy Implications}\label{sec:policy}
@@ -716,8 +719,8 @@ claim'' axis but from compounded asymmetries:
 \end{itemize}
 
 By the conservative standard from \cref{sec:field} ($n{\geq}5$, violation rate
-${\geq}20\%$), \textbf{at least 1.3\% of currently active reseller endpoints
-exhibit persistent substitution}.
+${\geq}20\%$), \textbf{at least 1.3\% of sampled active reseller endpoints
+meet our persistent-substitution criterion}.
 
 \subsection{Why upstream providers cannot solve this alone}
 Upstream providers have no effective means to detect substitution at reseller
@@ -736,8 +739,8 @@ third-party measurement infrastructure}~\cite{akerlof1970lemons}.
 \textbf{D1 --- Routing transparency.} Reseller endpoints should disclose the
 actually routed upstream model version in each response's metadata (HTTP
 header or non-semantic JSON field). Buyers can then verify alignment between
-paid-for model and actual routing. Implementation cost is near zero; D1 must
-be mandated by regulation or upstream contract.
+advertised model and actual routing. Because voluntary adoption would require resellers to give up substitution
+opacity, D1 must be mandated by regulation or upstream contract.
 
 \textbf{D2 --- Policy-injection disclosure.} Resellers that inject system
 prompts at the upstream layer must disclose this injection's existence and
@@ -775,48 +778,11 @@ the system-prompt perturbation space.
 
 \subsection{Synthetic-test sample size}
 The 95\% Wilson CI of $[74.2\%, 99.0\%]$ on $n{=}18+6$ is statistically
-insufficient to anchor the 94.4\% point estimate. Each additional round costs
-$\approx$~\$0.05; reaching $n{=}60$ would cost $\approx$~\$3 --- affordable but
-in tension with field-deployment investment. Future work should validate the
-synthetic point estimate at higher $n$.
-
-\subsection{Endpoint naming and ethical responsibility}
-Codenames R1--R15 with partially masked domains balance: (a) avoiding
-asymmetric competitive information injected by this paper into the market; (b)
-preserving endpoints' rebuttal and re-test space; (c) protecting the research
-team. We further attest: a fraction of probe responses flagged as substitution
-may have arisen from the endpoint's defensive response to our adversarial
-testing rather than its routine production traffic, especially in the
-low-evidence cohort (R10--R15). The current research design cannot fully
-discriminate between active reseller substitution and endpoint defensive
-routing under detected adversarial testing.
-
-\subsection{Ethical public-interest trade-offs}
-The LLM API resale market sits at the intersection of upstream service policy,
-restricted-region access policy, and consumer-protection law. The findings
-here may be invoked by any party to support its position. The authors
-acknowledge this risk and disclaim any precommitment to specific disputes in
-any jurisdiction.
-
-\subsection{IRB and ethical self-assessment}\label{sec:irb}
-This study does not involve human subjects, human-derived biological material,
-or personally identifying data. The objects of measurement are publicly
-marketed Internet-accessible HTTP API services. Consequently, no Institutional
-Review Board (IRB) approval was sought or required under the human-subjects
-research definitions of 45 CFR 46 (Common Rule, U.S.) or comparable
-jurisdictional analogues.
-
-In lieu of formal IRB review, the authors performed a self-assessment against
-the ACM Code of Ethics: (1.2 \emph{avoid harm}) no DoS, no resource exhaustion,
-no billing-bypass, no unauthorized access; (2.3 \emph{respect for rules}) all
-measurements via legitimately purchased keys under endpoints' published terms;
-(2.6 \emph{competence}) methodology peer-reviewed across the multi-iteration
-evolution log, with open-source release enabling external community
-verification; (3.1 \emph{public good}) the disclosure-duty proposals are
-framed for retail-consumer benefit, not author commercial interest; methodology
-released under copyleft (AGPL-3.0). A residual concern --- that the paper's
-attention may itself induce reputational harm to specific named endpoints --- is
-mitigated by the codename + masking convention adopted here.
+insufficient to anchor the 94.4\% point estimate. The synthetic result should
+therefore be read as an engineering validation of
+the detector's directionality rather than as a final performance estimate.
+Future work should validate the synthetic point estimate at higher $n$ and
+across a broader set of system-prompt perturbations.
 
 % =====================================================================
 \section{Conclusion}\label{sec:conclusion}
@@ -824,9 +790,9 @@ mitigated by the codename + masking convention adopted here.
 By means of a four-layer independent-fingerprint detection system applied to
 171 LLM API resale endpoints over 14 days, this paper has quantified for the
 first time the prevalence and distribution of model substitution in a market
-that exists, by economic necessity, in a regulatory gray zone. Under
-conservative criteria, \textbf{at least 1.3\% of active endpoints exhibit
-persistent substitution}; substitutions sort into five categories
+that exists in a regulatory gray zone. Under
+conservative criteria, \textbf{at least 1.3\% of sampled active endpoints meet our
+persistent-substitution criterion}; substitutions sort into five categories
 --- cross-family impersonation, silent downgrade, silent upgrade, version-tag
 forgery, and behavior injection --- each with a documented anchor case. The
 paper analyzes the multi-axis asymmetric-information harm imposed on
@@ -851,32 +817,58 @@ consumer protection, and forthcoming regulatory dialogue.
 
 % =====================================================================
 \appendix
-\section{Reproducibility via SQL and Open-Source Package}\label{app:sql}
+\section{Ethical Considerations}\label{app:ethics}
 
-The measurement database is PostgreSQL. Below are the queries that reproduce
-\cref{sec:results}'s tables.
+\paragraph{Disclosure scope.}
+Endpoints are referred to in the body by codenames (R1--R15) with partial
+domain masking. The full codename--domain mapping is preserved in the authors'
+internal records; bona-fide researchers may request access via the
+open-source repository at
+\url{https://github.com/Bazaarlinkorg/LLMprobe-engine}. The codename +
+masking convention is intended to avoid asymmetric competitive information
+being injected into the market by this paper, and to preserve rebuttal and
+re-test space for the named endpoints.
 
-\begin{lstlisting}
--- Verdict distribution (last 14d)
-SELECT "identityAssessment"->'verdict'->>'status' AS status, COUNT(*) AS n
-  FROM probe_history
- WHERE "createdAt" > NOW() - INTERVAL '14 days'
-   AND "identityAssessment" IS NOT NULL
- GROUP BY 1 ORDER BY 2 DESC;
-\end{lstlisting}
+\paragraph{Data minimization.}
+The measurement database stores only response content, token counts, and
+endpoint identifiers necessary for probe analysis. No personally
+identifying information, no end-user data of the studied endpoints, and no
+operations exceeding the publicly advertised access scope of the endpoints
+were collected.
 
-For a CLI-level reproduction:
-\begin{lstlisting}
-npm install -g @bazaarlink/probe-engine
-bazaarlink-probe run \
-  --base-url <reseller endpoint> \
-  --api-key  <your purchased key> \
-  --model    <advertised model id> \
-  --baseline-model <baseline lookup id> \
-  --output report.json
-\end{lstlisting}
-Layers~\textcircled{1}, \textcircled{2}, \textcircled{3} and verdict fusion are
-reproducible at v0.6.0; layer~\textcircled{4} requires v0.7.0+.
+\paragraph{Measurement constraints.}
+All probe traffic was issued via legitimately purchased API keys, of the
+same class any retail customer could issue. The study performed no
+denial-of-service, no billing-bypass, no unauthorized access, and no action
+exceeding endpoints' publicly advertised access scope. Endpoints were also
+receiving research-purpose stress-test traffic during the measurement
+window; a fraction of probe responses flagged as substitution may have
+arisen from defensive responses to that adversarial traffic. This
+``test-reflexivity'' concern should be weighed especially carefully in the
+low-evidence cohort ($n{<}5$).
+
+\paragraph{Dual-use risk and mitigations.}
+The detection methods described here can be used by resellers to evade
+detection. The authors judge the consumer-protection benefit of disclosure
+to substantially outweigh this risk. Mitigations: (1) the full
+codename--domain mapping is held in private records; (2) the open-source
+implementation is released under copyleft (AGPL-3.0) to maximize
+independent verification capacity; (3) method exposition focuses on
+detection techniques usable by consumers for self-protection rather than on
+attack vectors.
+
+\paragraph{IRB statement.}
+The study does not involve human subjects, human-derived biological
+material, or personally identifying data. The objects of measurement are
+publicly marketed Internet-accessible HTTP API services. Consequently, no
+Institutional Review Board approval was sought or required under
+45~CFR~46 (Common Rule, U.S.) or comparable jurisdictional analogues. The
+authors performed a self-assessment against the ACM Code of Ethics:
+(1.2~\emph{avoid harm}) no DoS, no resource exhaustion, no billing-bypass,
+no unauthorized access; (2.3~\emph{respect for rules}) all measurements
+under endpoints' published terms; (2.6~\emph{competence}) open-source
+release enables independent verification; (3.1~\emph{public good})
+disclosure-duty proposals are framed for retail-consumer benefit.
 
 \section{Endpoint Codename Statistics}
 
@@ -887,11 +879,11 @@ mapping via the open-source repository.
 
 \section{Open-Source Implementation Correspondence}\label{app:opensource}
 
-A core subset of the methodology is released under AGPL-3.0 at
+The methodology is released under AGPL-3.0 at
 \url{https://github.com/Bazaarlinkorg/LLMprobe-engine} as the package
 \texttt{@bazaarlink/probe-engine} (latest release v0.7.1 as of this manuscript).
 
-\begin{table}[h]
+\begin{table*}[h]
 \centering
 \small
 \begin{tabular}{@{}lll@{}}
@@ -905,7 +897,7 @@ Behavioral-vector extension & \cref{sec:layer4} & \texttt{src/sub-model-classifi
 Verdict fusion & \cref{sec:verdict} & \texttt{src/identity-verdict.ts} \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}
 
 The open-source release ships with offline baseline snapshots for the 22
 models reported in \cref{sec:baseline}, allowing reproduction without

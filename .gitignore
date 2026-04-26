@@ -1,3 +1,15 @@
 node_modules/
 *.env
 .env*
+
+# LaTeX build artifacts
+paper/**/*.aux
+paper/**/*.bbl
+paper/**/*.blg
+paper/**/*.fdb_latexmk
+paper/**/*.fls
+paper/**/*.log
+paper/**/*.out
+paper/**/*.xdv
+paper/**/build*.log
+paper/**/b2c.log
