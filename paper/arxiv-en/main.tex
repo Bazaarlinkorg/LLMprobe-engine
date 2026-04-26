@@ -754,18 +754,19 @@ expose the results as a machine-readable badge.
 % =====================================================================
 \section{Discussion and Limitations}\label{sec:discussion}
 
-\subsection{Sample composition: voluntary submission as a methodological choice}\label{sec:sample}
+\subsection{Sample composition: a consumer-driven endpoint set}\label{sec:sample}
 The 171 endpoints in this study were not obtained by random sampling from a
-reseller directory. They are the set of endpoints submitted by users to a
-public verification service over a 14-day window. We treat this not as an
-unaddressed bias but as a deliberate methodological choice: the population we
-are entitled to draw conclusions about is ``endpoints that some downstream
-user had reason to verify,'' not ``all reseller endpoints in
-existence''~\cite{paxson2004sound}. The validity claim attached to such data
-is correspondingly narrower: our prevalence figures (1.3\% strict, 9.9\%
-relaxed) describe \emph{the rate at which user-suspected endpoints turn out
-to actually exhibit substitution} --- itself a directly meaningful policy
-quantity.
+reseller directory. They are the set of endpoints submitted to our verification
+service, over a 14-day window, by \textbf{retail customers of resale endpoints}
+--- i.e., by consumers who had paid actual currency to purchase access from a
+given endpoint and who had reason to doubt the authenticity of the model they
+had purchased. The population we are entitled to draw conclusions about is
+therefore ``endpoints that some retail customer had reason to verify,'' not
+``all resale endpoints in existence''~\cite{paxson2004sound}. Our prevalence
+figures (1.3\% strict, 9.9\% relaxed) describe \emph{the rate at which
+consumer-suspected endpoints turn out to actually exhibit substitution} ---
+itself a directly meaningful policy quantity, because it characterizes the
+endpoints that real consumers paid for and developed real concerns about.
 
 \subsection{Detection ceiling}\label{sec:ceiling}
 Layer~\textcircled{4} exhibits a 17\% false-negative rate (1/6) under

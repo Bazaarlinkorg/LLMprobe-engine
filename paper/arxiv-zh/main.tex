@@ -6,9 +6,9 @@
 \documentclass[UTF8,fontset=none,10pt,a4paper,twocolumn]{ctexart}
 
 % ---- 繁體中文字體（Windows 內建）-------------------------------------
-\setCJKmainfont[BoldFont={Microsoft JhengHei Bold},ItalicFont={PMingLiU}]{PMingLiU}
-\setCJKsansfont{Microsoft JhengHei}
-\setCJKmonofont{PMingLiU}
+\setCJKmainfont[BoldFont={Microsoft JhengHei Bold},ItalicFont={PMingLiU},Scale=0.9]{PMingLiU}
+\setCJKsansfont[Scale=0.9]{Microsoft JhengHei}
+\setCJKmonofont[Scale=0.9]{PMingLiU}
 
 % ---- Packages ----------------------------------------------------------
 \usepackage[a4paper,margin=1in]{geometry}
@@ -402,8 +402,8 @@ R6 此事件對應於 R1 與 R2 持續性偽裝之外的第三種型態：\textb
 % =====================================================================
 \section{討論與限制}\label{sec:discussion}
 
-\subsection{樣本組成：以「自願提交」作為刻意的方法論選擇}\label{sec:sample}
-本研究 171 個端點並非自中轉商目錄隨機抽樣而得。它們是於 14 天測量視窗內，由使用者主動向公開驗證服務提交之端點集合。本研究將此視為\textbf{刻意的方法論選擇}而非未處理的偏誤：本研究有資格作出結論的母體是「曾被某下游使用者認為有理由驗證之端點」，而非「市場中存在的所有中轉端點」~\cite{paxson2004sound}。對此類資料應加之有效性主張因而較窄：本論文之違規率（嚴格 1.3\% / 放寬 9.9\%）所描述者為\emph{使用者所懷疑之端點實際呈現替換行為的比率}——此比率本身即為直接具有政策意義的量。
+\subsection{樣本組成：消費者驅動的端點集合}\label{sec:sample}
+本研究 171 個端點並非自中轉商目錄隨機抽樣而得，而是於 14 天測量視窗內由\textbf{中轉端點之零售客戶}主動提交至本驗證服務之集合——亦即由實際以真實貨幣購買該端點服務、並對其所購買之模型真實性產生疑慮之消費者所識別之樣本。本研究有資格作出結論的母體因此為「曾被某零售客戶認為有理由驗證之端點」，而非「市場中存在的所有中轉端點」~\cite{paxson2004sound}。本論文之違規率（嚴格 1.3\% / 放寬 9.9\%）描述者為\emph{消費者所懷疑之端點實際呈現替換行為的比率}——此比率本身即為直接具有政策意義的量，因其反映之為消費者實際付費購買、且實際產生疑慮的端點群體。
 
 \subsection{偵測天花板}\label{sec:ceiling}
 層\textcircled{\scriptsize 4}於合成測試中對「注入式 system prompt 攻擊」存在 17\%（1/6）的漏檢率。此天花板的根因為：當攻擊者於 system prompt 中明確指示模型「在回答 X 類問題時應拒絕」，模型會將其拒絕邊界推升至接近上層子模型的水準。閉合此天花板需要：（a）引入難以由 system prompt 改寫的訊號通道（如多輪一致性、無關問題的回憶準確度）；或（b）對攻擊者的系統提示空間建立對抗性測試集。
