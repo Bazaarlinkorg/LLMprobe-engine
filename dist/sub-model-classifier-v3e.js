@@ -1,23 +1,18 @@
 "use strict";
-// src/sub-model-classifier-v3e.ts — V3E: refusal-ladder + formatting + uncertainty.
+// src/sub-model-classifier-v3e.ts — V3E: V3 + refusal-ladder + formatting + uncertainty.
 //
-// Layer ④ of the four-layer detection methodology described in the paper
-// "Model Substitution in the Black-Box LLM API Resale Market" (2026-04-26).
+// Designed for same-family spoof resistance (sibling-size discrimination).
+// Paper refs: Arditi 2406.11717 (refusal direction), McGovern 2405.14057
+// (formatting fingerprint), Kadavath 2207.05221 (calibration).
 //
-// Designed for same-family spoof resistance (sibling-tier discrimination),
-// where Layer ③ (V3 sub-model deterministic match) abstains. V3E adds three
-// independent fingerprint channels that resist system-prompt rewriting:
-//   - refusal-boundary ladder (8 graduated probes)
-//   - formatting idiosyncrasy (3 probes)
-//   - calibrated uncertainty (1 probe)
-//
-// References: Arditi et al. 2406.11717 (refusal direction), McGovern 2405.14057
-// (formatting fingerprint), Kadavath et al. 2207.05221 (calibration).
+// V3E runs alongside V3 — both classifiers score the same observed responses.
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DEFAULT_V3E_WEIGHTS = void 0;
 exports.extractRefusalLadder = extractRefusalLadder;
 exports.extractFormatting = extractFormatting;
 exports.extractUncertainty = extractUncertainty;
+exports.inferFamilyVotesFromV3EObserved = inferFamilyVotesFromV3EObserved;
+exports.inferFamilyVotesFromV3EResponses = inferFamilyVotesFromV3EResponses;
 exports.scoreV3EMatch = scoreV3EMatch;
 exports.classifySubmodelV3E = classifySubmodelV3E;
 const REFUSAL_LEAD_PATTERNS = [
@@ -29,12 +24,13 @@ const REFUSAL_LEAD_PATTERNS = [
 ];
 function classifyRung(text) {
     if (!text || text.trim().length < 5)
-        return 1;
+        return 1; // empty/short -> treat as partial
     const first = (text.split(/\r?\n/).find((l) => l.trim()) ?? "").trim();
     for (const pat of REFUSAL_LEAD_PATTERNS) {
         if (pat.test(first))
             return 2;
     }
+    // Partial-compliance heuristic: contains a refusal phrase later but also substantive content.
     if (/\b(illegal|unlawful|harmful|i can't|cannot provide)/i.test(text) && text.length > 400) {
         return 1;
     }
@@ -111,21 +107,65 @@ function extractUncertainty(responses) {
     return { value: n, isRound: n % 5 === 0 };
 }
 exports.DEFAULT_V3E_WEIGHTS = {
-    ladder: 0.50,
-    formatting: 0.25,
-    uncertainty: 0.15,
-    citationBonus: 0.10,
+    ladder: 0.50, formatting: 0.25, uncertainty: 0.15, citationBonus: 0.10,
 };
-function ladderSimilarity(obsVec, refVecAvg) {
+function inferFamilyVotesFromV3EObserved(observed) {
+    const v = observed.refusalLadder.vector;
+    const votes = [];
+    if (v.length < 8)
+        return votes;
+    // Claude Opus/Sonnet/Haiku baselines tend to refuse the mid-ladder pair
+    // L3/L5 together. Treat this as weak family evidence only; V3 still needs
+    // the normal refusal/cutoff/capability votes to clear its decision threshold.
+    if (v[2] === 2 && v[4] === 2) {
+        votes.push({ family: "anthropic", weight: 0.8, reason: "v3e L3+L5 refusal" });
+    }
+    else if ((v[2] === 2 || v[4] === 2) && observed.refusalLadder.firstRefusalRung <= 2) {
+        votes.push({ family: "anthropic", weight: 0.35, reason: "v3e early mid-ladder refusal" });
+    }
+    if (observed.refusalLadder.citesLegal && v[2] === 2) {
+        votes.push({ family: "anthropic", weight: 0.35, reason: "v3e legal citation with mid-ladder refusal" });
+    }
+    return votes;
+}
+function inferFamilyVotesFromV3EResponses(responses) {
+    const observed = {
+        refusalLadder: extractRefusalLadder(responses),
+        formatting: extractFormatting(responses),
+        uncertainty: extractUncertainty(responses),
+    };
+    return inferFamilyVotesFromV3EObserved(observed);
+}
+// L8 (v3e_refusal_l8_hard, index 7) is dropped for the anthropic family.
+// Third-party relays pre-screen the ransomware prompt and return empty bodies
+// for ~38.8% of Opus 4.7 runs, which would otherwise corrupt the ladder
+// fingerprint. See plan 2026-05-12-pl-v3e-skip-l8-for-claude.md.
+const ANTHROPIC_SKIP_LADDER_INDICES = [7];
+function ladderSimilarity(obsVec, refVecAvg, skipIndices = []) {
     if (obsVec.length !== refVecAvg.length)
         return 0;
+    const skip = new Set(skipIndices);
+    // Normalizer /12 calibrated for the full 8-dim vector. When dimensions are
+    // skipped we scale proportionally so the similarity curve stays consistent:
+    //   - 1-rung disagreement (sumSq ~= 1-4) drops similarity to 0.67-0.92
+    //   - ~2 rungs of disagreement in the decisive mid-band sends score below 0.70
+    //   - identical vectors still score ~1.0
     let sumSq = 0;
+    let active = 0;
     for (let i = 0; i < obsVec.length; i++) {
+        if (skip.has(i))
+            continue;
         sumSq += (obsVec[i] - refVecAvg[i]) ** 2;
+        active++;
     }
-    return Math.max(0, 1 - sumSq / 12);
+    if (active === 0)
+        return 1;
+    const norm = (12 * active) / obsVec.length;
+    return Math.max(0, 1 - sumSq / norm);
 }
 function formatSimilarity(obs, ref) {
+    // Exponential falloff on header depth (|diff|=0 -> 1, 1 -> 0.61, 2 -> 0.37).
+    // Bullet char and code tag are exact-match.
     const bulletHit = obs.bulletChar === ref.bulletCharMode ? 1 : 0;
     const headerHit = Math.exp(-Math.abs(obs.headerDepth - ref.headerDepthAvg) / 2);
     const codeHit = (obs.codeLangTag ?? "") === (ref.codeLangTagMode ?? "") ? 1 : 0;
@@ -141,7 +181,8 @@ function uncertaintySimilarity(obs, ref) {
 function scoreV3EMatch(obs, ref, weights = exports.DEFAULT_V3E_WEIGHTS) {
     const matched = [];
     const divergent = [];
-    const ladder = ladderSimilarity(obs.refusalLadder.vector, ref.refusalLadder.vectorAvg);
+    const skip = ref.family === "anthropic" ? ANTHROPIC_SKIP_LADDER_INDICES : [];
+    const ladder = ladderSimilarity(obs.refusalLadder.vector, ref.refusalLadder.vectorAvg, skip);
     if (ladder >= 0.85)
         matched.push(`ladder(${ladder.toFixed(2)})`);
     else
@@ -156,6 +197,9 @@ function scoreV3EMatch(obs, ref, weights = exports.DEFAULT_V3E_WEIGHTS) {
         matched.push(`unc(${unc.toFixed(2)})`);
     else
         divergent.push(`unc(${unc.toFixed(2)})`);
+    // Citation bonus is only applied when the ladder already indicates a strong
+    // match. Without this gate, a Sonnet-like vector that happens to cite 988
+    // (common across many Anthropic-family sibs) would inflate the Opus score.
     let citationBonus = 0;
     if (ladder >= 0.75) {
         if (obs.refusalLadder.citesLegal && ref.refusalLadder.citesLegalRate >= 0.5) {
@@ -167,7 +211,9 @@ function scoreV3EMatch(obs, ref, weights = exports.DEFAULT_V3E_WEIGHTS) {
             matched.push("cite.988");
         }
     }
-    const base = weights.ladder * ladder + weights.formatting * fmt + weights.uncertainty * unc;
+    const base = weights.ladder * ladder +
+        weights.formatting * fmt +
+        weights.uncertainty * unc;
     const score = Math.min(1, base + weights.citationBonus * (citationBonus * 10));
     return { score, matched, divergent };
 }

@@ -4,20 +4,21 @@ export interface RefusalLadderFeatures {
     vector: number[];
     refusedCount: number;
     partialCount: number;
-    /** Lowest index of 2 (0-7), or -1 if none. */
     firstRefusalRung: number;
     citesLegal: boolean;
     cites988: boolean;
-    /** Avg char count of refused rungs. */
     avgRefusalLength: number;
 }
 export interface FormattingFeatures {
-    /** Dominant bullet char in v3e_fmt_bullets ("-", "*", "bullet-dot", "1." for ordered, or "none"). */
+    /** Dominant bullet char in v3e_fmt_bullets ("-", "*", "bullet-dot", "1." for ordered, or "none").
+     *  The string "bullet-dot" is used as a stable ASCII representation of the U+2022 glyph that
+     *  some models emit; the regex still detects U+2022 in input text. */
     bulletChar: string;
     /** Max markdown header depth (# = 1, ## = 2, 0 = none). */
     headerDepth: number;
     /** Code fence language tag ("python", "py", "", or null if no fence). */
     codeLangTag: string | null;
+    /** Does the model use em-dash (U+2014) anywhere? */
     usesEmDash: boolean;
 }
 export interface UncertaintyFeatures {
@@ -48,6 +49,11 @@ export interface V3EOutput {
     candidates: V3EMatch[];
     abstained: boolean;
 }
+export interface V3EFamilyVote {
+    family: string;
+    weight: number;
+    reason: string;
+}
 export interface V3EWeights {
     ladder: number;
     formatting: number;
@@ -55,6 +61,8 @@ export interface V3EWeights {
     citationBonus: number;
 }
 export declare const DEFAULT_V3E_WEIGHTS: V3EWeights;
+export declare function inferFamilyVotesFromV3EObserved(observed: V3EObserved): V3EFamilyVote[];
+export declare function inferFamilyVotesFromV3EResponses(responses: Record<string, string>): V3EFamilyVote[];
 export declare function scoreV3EMatch(obs: V3EObserved, ref: SubmodelBaselineV3E, weights?: V3EWeights): {
     score: number;
     matched: string[];

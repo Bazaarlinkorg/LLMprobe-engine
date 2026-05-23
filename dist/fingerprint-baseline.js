@@ -178,6 +178,20 @@ exports.FAMILY_BASELINES = [
             ["subModelSignals", "tps_unstable", 1.5], // Gemini thinking models have unstable TPS
             ["subModelSignals", "ttft_median_norm", 1.0], // Gemini slow TTFT with median norm — present in all 3 failing google rows; NOT in gpt-4o rows
             ["subModelSignals", "out_len_verbose", 1.5], // Gemini tends to produce verbose output
+            // TODO(2026-04-27): weights below are inherited from Anthropic's pre-2026-04-17
+            // calibration values (high). Anthropic and OpenAI both went through a
+            // "reduce because spoofable, then bump back up after firing-rate data" arc.
+            // Google jumps straight to high weights without that data check. Recalibrate
+            // against Gemini firing rates after Phase C baseline rebuild lands.
+            // Direction E self-knowledge (added 2026-04-27 — was missing entirely)
+            ["linguisticFingerprint", "meta_creator_google", 2.5], // Gemini self-reports as Google/DeepMind
+            ["linguisticFingerprint", "meta_creator_anthropic", -1.0], // contradicts google
+            ["linguisticFingerprint", "meta_creator_openai", -1.0], // contradicts google
+            ["linguisticFingerprint", "meta_ctx_1m_plus", 2.5], // Gemini 1.5+/3.x report 1M-2M context
+            ["linguisticFingerprint", "meta_ctx_200k", -1.0], // 200k = Claude territory, not Gemini
+            ["linguisticFingerprint", "meta_ctx_128k", -1.0], // 128k = GPT, not Gemini
+            // Gemini exhibits stable self-reporting across runs
+            ["linguisticFingerprint", "overall_stability", 1.5],
             ["selfClaim", "claude", -3.0],
             ["selfClaim", "openai", -3.0],
         ],

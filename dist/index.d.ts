@@ -36,8 +36,9 @@ export { flattenFeatures, flattenSubModelSignals, matchSubModels } from "./sub-m
 export type { SubModelCandidate, StoredModelFingerprint } from "./sub-model-matcher.js";
 export { computeVerdict, V3_HIGH_CONFIDENCE } from "./identity-verdict.js";
 export type { VerdictStatus, VerdictInput, VerdictResult, ConfidenceBand, } from "./identity-verdict.js";
-export { classifySubmodelV3, scoreExtractedFeatures, extractV3Features, extractCutoff as extractV3Cutoff, extractCapability as extractV3Capability, extractRefusal as extractV3Refusal, implyFamily as implyFamilyV3, lengthScoreLogGaussian, verifyPairwiseUniqueness, V3_BASELINES, getBaselinesForFamily, getAllFamilies, TIE_BREAK_GAP, } from "./sub-model-classifier-v3.js";
-export type { V3Features, V3Match, V3Output, ClassifySubmodelV3Options, } from "./sub-model-classifier-v3.js";
+export { classifySubmodelV3, scoreExtractedFeatures, extractV3Features, extractCutoff as extractV3Cutoff, extractCapability as extractV3Capability, extractRefusal as extractV3Refusal, implyFamily as implyFamilyV3, implyFamilyV2A, implyFamilyV2B, implyFamilyV2BWithVotes, lengthScoreLogGaussian, verifyPairwiseUniqueness, V3_BASELINES, getAllFamilies, TIE_BREAK_GAP, } from "./sub-model-classifier-v3.js";
+export type { V3Features, V3Match, V3Output, FamilyVoteResult, } from "./sub-model-classifier-v3.js";
+export { getBaselinesForFamily, } from "./sub-model-baselines-v3.js";
 export type { SubmodelBaselineV3 } from "./sub-model-baselines-v3.js";
 export { buildUniquenessMap, uniquenessBoost, UNIQUENESS_BOOST_PER_MATCH, UNIQUENESS_BOOST_CAP, } from "./sub-model-v3-uniqueness.js";
 export { shouldAbstainSubModel } from "./submodel-abstain.js";
@@ -49,4 +50,24 @@ export { classifySubmodelV3F, scoreV3FMatch } from "./sub-model-classifier-v3f.j
 export type { V3FMatch, V3FOutput } from "./sub-model-classifier-v3f.js";
 export type { SubmodelBaselineV3E, V3EBaselineSnapshot } from "./sub-model-baselines-v3e.js";
 export { loadV3EBaselinesFromSnapshot, setV3EBaselines, getCachedV3EBaselines, clearV3ECache, } from "./sub-model-baselines-v3e-store.js";
+export { fuseToV4, V4_GLOBAL_CONFIDENCE_THRESHOLD, V3F_TIEBREAKER_THRESHOLD, V3F_TIEBREAKER_GAP_MAX, } from "./sub-model-classifier-v4.js";
+export type { V4Match, V4Output, V4FuseSource, V3LikeAdapter, } from "./sub-model-classifier-v4.js";
+export { classifySubmodelIKP, fuseV3WithIKP, IKP_PROBE_IDS, } from "./sub-model-classifier-ikp.js";
+export type { IkpOutput, IkpMatch, IkpBaselineRow, } from "./sub-model-classifier-ikp.js";
+export { scoreSubModels, CONFIDENCE_THRESHOLD as BAYESIAN_CONFIDENCE_THRESHOLD, } from "./sub-model-bayesian.js";
+export type { SubModelPosterior, SubModelResult, SubModelBaselineRow, } from "./sub-model-bayesian.js";
+export { computeBaselineMatchVotes, responseSimilarity, baselineModelIdToFamily } from "./baseline-match-votes.js";
+export type { BaselineRow } from "./baseline-match-votes.js";
+export { modelIdToFamily, scoreLinguisticOnly, scoreFullFeatureSet, computeAccuracy, } from "./backtest-scorer.js";
+export type { AccuracyStats } from "./backtest-scorer.js";
+export { categoryHitRate, relativeCategoryFitness, } from "./fingerprint-category-hit-rate.js";
+export { classifyIdentityV2, classifyIdentityV2A, classifyIdentityV2B, } from "./identity-classifier-v2.js";
+export type { ClassifyV2Input, ClassifyV2Output, } from "./identity-classifier-v2.js";
+export { createBaselineStore, defaultBaselineStore, getCachedBaselines, getCachedBaselinesForFamily, getCachedFamilies, invalidateBaselineCache, } from "./sub-model-baselines-v3-store.js";
+export type { BaselineStore, BaselineStoreOptions, } from "./sub-model-baselines-v3-store.js";
+export { extractSubModelFeatures, extractPiDistributionFeatures, } from "./submodel-features.js";
+export type { SubModelExtractorInput } from "./submodel-features.js";
+export { flattenLinguisticFeatures, matchSubModelsLinguistic, identifySubModelBayesian, baselinesFromDbRows, } from "./sub-model-matcher.js";
+export { bayesianScoreDisplayCalibrated, } from "./fingerprint-bayesian.js";
+export type { CalibratedScoreOptions, } from "./fingerprint-bayesian.js";
 //# sourceMappingURL=index.d.ts.map

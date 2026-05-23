@@ -1,4 +1,4 @@
 "use strict";
-// src/identity-report.ts — Identity assessment types for @bazaarlink/probe-engine (MIT)
+// src/identity-report.ts — Identity assessment types for @bazaarlink/probe-engine
 Object.defineProperty(exports, "__esModule", { value: true });
 //# sourceMappingURL=identity-report.js.map

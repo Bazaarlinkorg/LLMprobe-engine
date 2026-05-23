@@ -1,5 +1,6 @@
 import type { SubmodelBaselineV3 } from "./sub-model-baselines-v3.js";
-import { V3_BASELINES, getBaselinesForFamily, getAllFamilies } from "./sub-model-baselines-v3.js";
+import { V3_BASELINES, getAllFamilies } from "./sub-model-baselines-v3.js";
+import { type V3EFamilyVote } from "./sub-model-classifier-v3e.js";
 export interface V3Features {
     cutoff: string | null;
     capability: {
@@ -37,9 +38,10 @@ export interface V3Match {
     matchedFeatures: string[];
     divergentFeatures: string[];
 }
-/** Score gap below which the scorer abstains. Opus 4.5 / 4.7 can tie within
- * 2-3% due to shared capability + refusal lead prefix. 5% is generous enough
- * to catch these cases without suppressing legitimate-but-close winners. */
+/** Score gap below which the scorer abstains. Tuned from baseline analysis —
+ * Opus 4.5 / 4.7 can tie within 2-3% due to shared capability + refusal lead
+ * prefix. 5% is generous enough to catch these cases without suppressing
+ * legitimate-but-close winners. */
 export declare const TIE_BREAK_GAP = 0.05;
 export interface V3Output {
     features: V3Features;
@@ -54,8 +56,15 @@ export interface V3Output {
     /** true iff familyImplied !== predictedFamily and predictedFamily given */
     familyMismatch: boolean;
     /** true when top-2 gap < TIE_BREAK_GAP — scorer cannot confidently pick one.
-     * `top` is null when this is true. */
+     * UI should show "子模型無法區分". `top` is null when this is true. */
     abstained: boolean;
+}
+export interface FamilyVoteResult {
+    family: string | null;
+    votes: Record<string, number>;
+    score: number;
+    gap: number;
+    reasons: string[];
 }
 export declare function extractCutoff(text: string): string | null;
 export declare function extractCapability(text: string): V3Features["capability"];
@@ -64,30 +73,25 @@ export declare function extractV3Features(responses: Record<string, string>, rej
 /** Log-Gaussian length-similarity kernel.
  * Score decays smoothly with |log(obs/ref)|. Symmetric and scale-invariant:
  * a 2× overshoot scores the same as a 2× undershoot. sigma=0.5 → 20% drift ≈
- * 0.94, 2× drift ≈ 0.38. */
+ * 0.94, 2× drift ≈ 0.38 (tuned so Opus 4.5 ref=457 and Opus 4.7 ref=1023
+ * clearly separate under a 700-char observation). */
 export declare function lengthScoreLogGaussian(obs: number, ref: number): number;
+export declare function implyFamilyV2A(features: V3Features): string | null;
+export declare function implyFamilyV2BWithVotes(features: V3Features, baselines?: SubmodelBaselineV3[], extraVotes?: V3EFamilyVote[]): FamilyVoteResult;
+export declare function implyFamilyV2B(features: V3Features): string | null;
 export declare function implyFamily(features: V3Features): string | null;
-export interface ClassifySubmodelV3Options {
-    /** V2 step-1 family; scopes matching to this family */
+export declare function classifySubmodelV3(responses: Record<string, string>, options?: {
     predictedFamily?: string;
-    /** default 0.60 */
     confidenceThreshold?: number;
-    /** from probe-run observation */
     rejectsTemperature?: boolean | null;
-    /** runtime-overridable baseline pool (defaults to shipped V3_BASELINES) */
-    baselines?: SubmodelBaselineV3[];
-}
-export declare function classifySubmodelV3(responses: Record<string, string>, options?: ClassifySubmodelV3Options): V3Output;
-/** Re-score a previously-extracted V3Features vector (e.g. from probe history
- * JSON) against the baseline pool. Useful for replay / backtesting without
- * re-calling upstream. */
-export declare function scoreExtractedFeatures(features: V3Features, options?: {
-    baselines?: SubmodelBaselineV3[];
 }): V3Output;
-/** Test helper: assert pairwise uniqueness across the baseline fixture. */
+/** Re-score a previously-extracted V3Features vector (e.g. from probe_history
+ * JSON) against the current baselines. Used by scripts/v3-scorer-replay.mts
+ * to compare old-scorer vs new-scorer results without re-calling upstream. */
+export declare function scoreExtractedFeatures(features: V3Features): V3Output;
 export declare function verifyPairwiseUniqueness(): {
     unique: boolean;
     collisions: Array<[string, string]>;
 };
-export { V3_BASELINES, getBaselinesForFamily, getAllFamilies };
+export { V3_BASELINES, getAllFamilies };
 //# sourceMappingURL=sub-model-classifier-v3.d.ts.map

@@ -29,4 +29,15 @@ export declare function bayesianScore(features: FingerprintFeatureSet, baselines
  * is for UI display bars only.
  */
 export declare function bayesianScoreDisplay(features: FingerprintFeatureSet, baselines: FamilyBaseline[], temperature?: number): FamilyScore[];
+export interface CalibratedScoreOptions {
+    temperature?: number;
+    /** Caps the top displayed score when evidence is sparse or the margin is thin. */
+    calibrateTopScore?: boolean;
+}
+/**
+ * Display-oriented score with the same ranking as bayesianScoreDisplay, but
+ * with an evidence/margin cap on the winner. This prevents a single strong
+ * self-claim or a tiny set of signals from rendering as "100%" certainty.
+ */
+export declare function bayesianScoreDisplayCalibrated(features: FingerprintFeatureSet, baselines: FamilyBaseline[], options?: CalibratedScoreOptions): FamilyScore[];
 //# sourceMappingURL=fingerprint-bayesian.d.ts.map

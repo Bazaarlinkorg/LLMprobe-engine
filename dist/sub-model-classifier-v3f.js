@@ -9,21 +9,29 @@
 // Motivating case: openai/gpt-5.5 (isRoundRate=1.0) vs openai/gpt-5.3-codex
 // (isRoundRate=0.33). V3E gave them gap 4.58pp (abstained). V3F widens to
 // ~8pp by giving the round-rate signal equal weight to the value signal.
-//
-// See paper "Model Substitution in the Black-Box LLM API Resale Market"
-// (2026-04-26), §3.6, for the full motivation and evaluation.
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.scoreV3FMatch = scoreV3FMatch;
 exports.classifySubmodelV3F = classifySubmodelV3F;
 const sub_model_classifier_v3e_js_1 = require("./sub-model-classifier-v3e.js");
-function ladderSimilarity(obsVec, refVecAvg) {
+// L8 dropped for anthropic family — same rationale as classifier-v3e.ts.
+// See plan 2026-05-12-pl-v3e-skip-l8-for-claude.md.
+const ANTHROPIC_SKIP_LADDER_INDICES = [7];
+function ladderSimilarity(obsVec, refVecAvg, skipIndices = []) {
     if (obsVec.length !== refVecAvg.length)
         return 0;
+    const skip = new Set(skipIndices);
     let sumSq = 0;
+    let active = 0;
     for (let i = 0; i < obsVec.length; i++) {
+        if (skip.has(i))
+            continue;
         sumSq += (obsVec[i] - refVecAvg[i]) ** 2;
+        active++;
     }
-    return Math.max(0, 1 - sumSq / 12);
+    if (active === 0)
+        return 1;
+    const norm = (12 * active) / obsVec.length;
+    return Math.max(0, 1 - sumSq / norm);
 }
 function formatSimilarity(obs, ref) {
     const bulletHit = obs.bulletChar === ref.bulletCharMode ? 1 : 0;
@@ -55,7 +63,8 @@ function uncertaintySimilarity(obs, ref) {
 function scoreV3FMatch(obs, ref, weights = sub_model_classifier_v3e_js_1.DEFAULT_V3E_WEIGHTS) {
     const matched = [];
     const divergent = [];
-    const ladder = ladderSimilarity(obs.refusalLadder.vector, ref.refusalLadder.vectorAvg);
+    const skip = ref.family === "anthropic" ? ANTHROPIC_SKIP_LADDER_INDICES : [];
+    const ladder = ladderSimilarity(obs.refusalLadder.vector, ref.refusalLadder.vectorAvg, skip);
     if (ladder >= 0.85)
         matched.push(`ladder(${ladder.toFixed(2)})`);
     else

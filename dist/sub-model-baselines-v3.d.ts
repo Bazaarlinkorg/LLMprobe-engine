@@ -31,9 +31,10 @@ export interface SubmodelBaselineV3 {
         /** approximate character count of full refusal response */
         length_avg: number;
     };
-    sourceIteration: "iter2" | "iter3" | "iter4" | "iter5";
+    sourceIteration: "iter2" | "iter3" | "iter4" | "iter5" | "iter6";
     /** true = model rejects the temperature parameter (HTTP 400).
-     *  Sourced from OpenRouter supported_parameters metadata. */
+     *  Sourced from OpenRouter supported_parameters metadata — cannot be observed
+     *  via OR (OR silently strips unsupported params). Must be hardcoded. */
     rejectsTemperature: boolean;
 }
 export declare const V3_BASELINES: SubmodelBaselineV3[];

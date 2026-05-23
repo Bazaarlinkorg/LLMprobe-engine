@@ -1057,6 +1057,62 @@ exports.PROBE_SUITE = [
         neutral: true,
         maxTokens: 1500,
     },
+    // ── Group: Sub-Model — IKP (Inherent Knowledge Probe, v0.8.0) ─────────────
+    // 5 short-answer factual probes with stable but model-version-specific
+    // correct answers. Used by sub-model-classifier-ikp as a knowledge-anchor
+    // cross-check for V3 in the V4 ensemble fuse. First production candidate
+    // keeps only probes with observed identity value from the 2026-05-10
+    // 9-model, 10-run experiment.
+    {
+        id: "ikp_t3_domain_fact",
+        label: "Sub-model consistency: TLS fact",
+        group: "submodel",
+        scoring: "feature_extract",
+        description: "IKP-lite factual probe. Measures short-answer factual consistency for sub-model identity comparison; used only as a neutral fingerprint signal.",
+        prompt: "Answer in one short phrase only: In TLS 1.3, which handshake message carries the server's certificate?",
+        neutral: true,
+        maxTokens: 80,
+    },
+    {
+        id: "ikp_t4_obscure_fact",
+        label: "Sub-model consistency: Raft fact",
+        group: "submodel",
+        scoring: "feature_extract",
+        description: "IKP-lite obscure factual probe. Low-weight telemetry signal for sibling-model comparison.",
+        prompt: "Answer in one short phrase only: What is the name of the invariant used by Raft to ensure a leader contains all committed log entries from previous terms?",
+        neutral: true,
+        maxTokens: 120,
+    },
+    {
+        id: "ikp_t4_bio_fact",
+        label: "Sub-model consistency: biology fact",
+        group: "submodel",
+        scoring: "feature_extract",
+        description: "IKP-lite factual probe. Measures domain-specific factual answer pattern for sub-model identity comparison.",
+        prompt: "Answer in one short phrase only: Which conserved catalytic triad residues are classically found in chymotrypsin-like serine proteases?",
+        neutral: true,
+        maxTokens: 120,
+    },
+    {
+        id: "ikp_t5_deep_fact",
+        label: "Sub-model consistency: Paxos fact",
+        group: "submodel",
+        scoring: "feature_extract",
+        description: "IKP-lite deep factual probe. Measures cautiousness and recall pattern on a technical proof property.",
+        prompt: "Answer in one short phrase only: In the Paxos Made Simple proof sketch, what property says that if a proposal with value v is chosen, every higher-numbered proposal chosen has value v?",
+        neutral: true,
+        maxTokens: 120,
+    },
+    {
+        id: "ikp_t5_codegen_edge",
+        label: "Sub-model consistency: C++ overload fact",
+        group: "submodel",
+        scoring: "feature_extract",
+        description: "IKP-lite technical factual probe. Useful in the 2026-05-10 experiment for OpenAI and Anthropic sibling separation.",
+        prompt: "Answer in one short phrase only: In C++ overload resolution, what is the term for a function candidate whose constraints are not satisfied and is removed before ranking viable functions?",
+        neutral: true,
+        maxTokens: 120,
+    },
 ];
 /** Prompts compatible with the existing model-evaluator (all except cache_detection and identity probes) */
 exports.EVAL_PROMPTS = exports.PROBE_SUITE
