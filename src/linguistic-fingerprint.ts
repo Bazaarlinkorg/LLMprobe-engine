@@ -1,4 +1,4 @@
-// src/linguistic-fingerprint.ts — Multi-run probe distribution and feature extraction
+// lib/linguistic-fingerprint.ts — Multi-run probe distribution and feature extraction
 
 const SKIP_ANSWERS = new Set(["ERR", "T/O", "TIMEOUT", "PARSE_ERR", "NET_ERR"]);
 
@@ -230,7 +230,13 @@ export function extractLinguisticFeatures(
   }
 
   // ── meta_context_len: self-reported context window ───────────────────────────
-  // Claude Opus/Sonnet 4.6: 200000; GPT-4/4.5: 128000; older GLM: 4096-128000
+  // Buckets calibrated 2026-04-27 after Gemini 3.x exposed the original
+  // upper-unbounded 200k bucket (matched Claude AND Gemini 1M-2M, false signal).
+  //
+  //   <100k         → meta_ctx_small         (older GLM, Llama 8k-32k)
+  //   [100k, 180k)  → meta_ctx_128k          (GPT-4/4.5)
+  //   [180k, 900k)  → meta_ctx_200k          (Claude Opus/Sonnet)
+  //   ≥900k         → meta_ctx_1m_plus       (Gemini 1.5+, GPT-4.1, newer Llama)
   const metaCtxAnswers = effective("meta_context_len");
   if (metaCtxAnswers?.length) {
     const dist = computeDistribution(metaCtxAnswers);
@@ -238,9 +244,10 @@ export function extractLinguisticFeatures(
     const mode = modeAnswer(dist).replace(/[,_\s]/g, "").trim();
     if (Object.keys(dist).length > 0) stabilities.push(stability);
     const asNum = parseInt(mode, 10);
-    f["meta_ctx_200k"]       = asNum >= 180000 ? 1 : 0;   // Claude (200k)
-    f["meta_ctx_128k"]       = asNum >= 100000 && asNum < 180000 ? 1 : 0;  // GPT-4/4.5
-    f["meta_ctx_small"]      = asNum > 0 && asNum < 100000 ? 1 : 0;  // older GLM
+    f["meta_ctx_small"]      = asNum > 0 && asNum < 100000 ? 1 : 0;
+    f["meta_ctx_128k"]       = asNum >= 100000 && asNum < 180000 ? 1 : 0;
+    f["meta_ctx_200k"]       = asNum >= 180000 && asNum < 900000 ? 1 : 0;
+    f["meta_ctx_1m_plus"]    = asNum >= 900000 ? 1 : 0;
     f["meta_ctx_stability"]  = stability;
   }
 
@@ -265,6 +272,7 @@ export function extractLinguisticFeatures(
     if (Object.keys(dist).length > 0) stabilities.push(stability);
     f["meta_creator_anthropic"] = mode.includes("anthropic") ? 1 : 0;
     f["meta_creator_openai"]    = mode.includes("openai") ? 1 : 0;
+    f["meta_creator_google"]    = mode.includes("google") || mode.includes("deepmind") ? 1 : 0;
     f["meta_creator_zhipu"]     = mode.includes("zhipu") || mode.includes("智谱") ? 1 : 0;
     f["meta_creator_stability"] = stability;
   }
