@@ -1,40 +1,34 @@
-// src/sub-model-classifier-v3e.ts — V3E: refusal-ladder + formatting + uncertainty.
+// src/sub-model-classifier-v3e.ts — V3E: V3 + refusal-ladder + formatting + uncertainty.
 //
-// Layer ④ of the four-layer detection methodology described in the paper
-// "Model Substitution in the Black-Box LLM API Resale Market" (2026-04-26).
+// Designed for same-family spoof resistance (sibling-size discrimination).
+// Paper refs: Arditi 2406.11717 (refusal direction), McGovern 2405.14057
+// (formatting fingerprint), Kadavath 2207.05221 (calibration).
 //
-// Designed for same-family spoof resistance (sibling-tier discrimination),
-// where Layer ③ (V3 sub-model deterministic match) abstains. V3E adds three
-// independent fingerprint channels that resist system-prompt rewriting:
-//   - refusal-boundary ladder (8 graduated probes)
-//   - formatting idiosyncrasy (3 probes)
-//   - calibrated uncertainty (1 probe)
-//
-// References: Arditi et al. 2406.11717 (refusal direction), McGovern 2405.14057
-// (formatting fingerprint), Kadavath et al. 2207.05221 (calibration).
+// V3E runs alongside V3 — both classifiers score the same observed responses.
 
 import type { SubmodelBaselineV3E } from "./sub-model-baselines-v3e.js";
 
 export interface RefusalLadderFeatures {
   /** 8-rung compliance vector: 0=compliant, 1=partial, 2=refused. */
   vector: number[];
-  refusedCount: number;
-  partialCount: number;
-  /** Lowest index of 2 (0-7), or -1 if none. */
-  firstRefusalRung: number;
-  citesLegal: boolean;
+  refusedCount: number;        // sum of 2s
+  partialCount: number;        // sum of 1s
+  firstRefusalRung: number;    // lowest index of 2 (0-7), or -1 if none
+  citesLegal: boolean;         // any rung cites 18 USC / similar
   cites988: boolean;
-  /** Avg char count of refused rungs. */
-  avgRefusalLength: number;
+  avgRefusalLength: number;    // avg char count of refused rungs
 }
 
 export interface FormattingFeatures {
-  /** Dominant bullet char in v3e_fmt_bullets ("-", "*", "bullet-dot", "1." for ordered, or "none"). */
+  /** Dominant bullet char in v3e_fmt_bullets ("-", "*", "bullet-dot", "1." for ordered, or "none").
+   *  The string "bullet-dot" is used as a stable ASCII representation of the U+2022 glyph that
+   *  some models emit; the regex still detects U+2022 in input text. */
   bulletChar: string;
   /** Max markdown header depth (# = 1, ## = 2, 0 = none). */
   headerDepth: number;
   /** Code fence language tag ("python", "py", "", or null if no fence). */
   codeLangTag: string | null;
+  /** Does the model use em-dash (U+2014) anywhere? */
   usesEmDash: boolean;
 }
 
@@ -54,11 +48,12 @@ const REFUSAL_LEAD_PATTERNS = [
 ];
 
 function classifyRung(text: string): 0 | 1 | 2 {
-  if (!text || text.trim().length < 5) return 1;
+  if (!text || text.trim().length < 5) return 1; // empty/short -> treat as partial
   const first = (text.split(/\r?\n/).find((l) => l.trim()) ?? "").trim();
   for (const pat of REFUSAL_LEAD_PATTERNS) {
     if (pat.test(first)) return 2;
   }
+  // Partial-compliance heuristic: contains a refusal phrase later but also substantive content.
   if (/\b(illegal|unlawful|harmful|i can't|cannot provide)/i.test(text) && text.length > 400) {
     return 1;
   }
@@ -160,6 +155,12 @@ export interface V3EOutput {
   abstained: boolean;
 }
 
+export interface V3EFamilyVote {
+  family: string;
+  weight: number;
+  reason: string;
+}
+
 export interface V3EWeights {
   ladder: number;
   formatting: number;
@@ -167,22 +168,72 @@ export interface V3EWeights {
   citationBonus: number;
 }
 export const DEFAULT_V3E_WEIGHTS: V3EWeights = {
-  ladder: 0.50,
-  formatting: 0.25,
-  uncertainty: 0.15,
-  citationBonus: 0.10,
+  ladder: 0.50, formatting: 0.25, uncertainty: 0.15, citationBonus: 0.10,
 };
 
-function ladderSimilarity(obsVec: number[], refVecAvg: number[]): number {
-  if (obsVec.length !== refVecAvg.length) return 0;
-  let sumSq = 0;
-  for (let i = 0; i < obsVec.length; i++) {
-    sumSq += (obsVec[i] - refVecAvg[i]) ** 2;
+export function inferFamilyVotesFromV3EObserved(observed: V3EObserved): V3EFamilyVote[] {
+  const v = observed.refusalLadder.vector;
+  const votes: V3EFamilyVote[] = [];
+  if (v.length < 8) return votes;
+
+  // Claude Opus/Sonnet/Haiku baselines tend to refuse the mid-ladder pair
+  // L3/L5 together. Treat this as weak family evidence only; V3 still needs
+  // the normal refusal/cutoff/capability votes to clear its decision threshold.
+  if (v[2] === 2 && v[4] === 2) {
+    votes.push({ family: "anthropic", weight: 0.8, reason: "v3e L3+L5 refusal" });
+  } else if ((v[2] === 2 || v[4] === 2) && observed.refusalLadder.firstRefusalRung <= 2) {
+    votes.push({ family: "anthropic", weight: 0.35, reason: "v3e early mid-ladder refusal" });
   }
-  return Math.max(0, 1 - sumSq / 12);
+
+  if (observed.refusalLadder.citesLegal && v[2] === 2) {
+    votes.push({ family: "anthropic", weight: 0.35, reason: "v3e legal citation with mid-ladder refusal" });
+  }
+
+  return votes;
+}
+
+export function inferFamilyVotesFromV3EResponses(responses: Record<string, string>): V3EFamilyVote[] {
+  const observed: V3EObserved = {
+    refusalLadder: extractRefusalLadder(responses),
+    formatting: extractFormatting(responses),
+    uncertainty: extractUncertainty(responses),
+  };
+  return inferFamilyVotesFromV3EObserved(observed);
+}
+
+// L8 (v3e_refusal_l8_hard, index 7) is dropped for the anthropic family.
+// Third-party relays pre-screen the ransomware prompt and return empty bodies
+// for ~38.8% of Opus 4.7 runs, which would otherwise corrupt the ladder
+// fingerprint. See plan 2026-05-12-pl-v3e-skip-l8-for-claude.md.
+const ANTHROPIC_SKIP_LADDER_INDICES = [7] as const;
+
+function ladderSimilarity(
+  obsVec: number[],
+  refVecAvg: number[],
+  skipIndices: readonly number[] = [],
+): number {
+  if (obsVec.length !== refVecAvg.length) return 0;
+  const skip = new Set(skipIndices);
+  // Normalizer /12 calibrated for the full 8-dim vector. When dimensions are
+  // skipped we scale proportionally so the similarity curve stays consistent:
+  //   - 1-rung disagreement (sumSq ~= 1-4) drops similarity to 0.67-0.92
+  //   - ~2 rungs of disagreement in the decisive mid-band sends score below 0.70
+  //   - identical vectors still score ~1.0
+  let sumSq = 0;
+  let active = 0;
+  for (let i = 0; i < obsVec.length; i++) {
+    if (skip.has(i)) continue;
+    sumSq += (obsVec[i] - refVecAvg[i]) ** 2;
+    active++;
+  }
+  if (active === 0) return 1;
+  const norm = (12 * active) / obsVec.length;
+  return Math.max(0, 1 - sumSq / norm);
 }
 
 function formatSimilarity(obs: FormattingFeatures, ref: SubmodelBaselineV3E["formatting"]): number {
+  // Exponential falloff on header depth (|diff|=0 -> 1, 1 -> 0.61, 2 -> 0.37).
+  // Bullet char and code tag are exact-match.
   const bulletHit = obs.bulletChar === ref.bulletCharMode ? 1 : 0;
   const headerHit = Math.exp(-Math.abs(obs.headerDepth - ref.headerDepthAvg) / 2);
   const codeHit = (obs.codeLangTag ?? "") === (ref.codeLangTagMode ?? "") ? 1 : 0;
@@ -204,7 +255,8 @@ export function scoreV3EMatch(
   const matched: string[] = [];
   const divergent: string[] = [];
 
-  const ladder = ladderSimilarity(obs.refusalLadder.vector, ref.refusalLadder.vectorAvg);
+  const skip = ref.family === "anthropic" ? ANTHROPIC_SKIP_LADDER_INDICES : [];
+  const ladder = ladderSimilarity(obs.refusalLadder.vector, ref.refusalLadder.vectorAvg, skip);
   if (ladder >= 0.85) matched.push(`ladder(${ladder.toFixed(2)})`);
   else divergent.push(`ladder(${ladder.toFixed(2)})`);
 
@@ -216,6 +268,9 @@ export function scoreV3EMatch(
   if (unc >= 0.5) matched.push(`unc(${unc.toFixed(2)})`);
   else divergent.push(`unc(${unc.toFixed(2)})`);
 
+  // Citation bonus is only applied when the ladder already indicates a strong
+  // match. Without this gate, a Sonnet-like vector that happens to cite 988
+  // (common across many Anthropic-family sibs) would inflate the Opus score.
   let citationBonus = 0;
   if (ladder >= 0.75) {
     if (obs.refusalLadder.citesLegal && ref.refusalLadder.citesLegalRate >= 0.5) {
@@ -228,7 +283,10 @@ export function scoreV3EMatch(
     }
   }
 
-  const base = weights.ladder * ladder + weights.formatting * fmt + weights.uncertainty * unc;
+  const base =
+    weights.ladder * ladder +
+    weights.formatting * fmt +
+    weights.uncertainty * unc;
   const score = Math.min(1, base + weights.citationBonus * (citationBonus * 10));
   return { score, matched, divergent };
 }

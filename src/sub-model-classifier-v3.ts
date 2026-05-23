@@ -14,16 +14,20 @@
 import type { SubmodelBaselineV3 } from "./sub-model-baselines-v3.js";
 import { V3_BASELINES, getBaselinesForFamily, getAllFamilies } from "./sub-model-baselines-v3.js";
 import { buildUniquenessMap, uniquenessBoost } from "./sub-model-v3-uniqueness.js";
+import { getCachedBaselines } from "./sub-model-baselines-v3-store.js";
+import { inferFamilyVotesFromV3EResponses, type V3EFamilyVote } from "./sub-model-classifier-v3e.js";
 
-// The public engine ships with a fixed V3_BASELINES list. Downstream users
-// who need runtime-updatable baselines (e.g. hot-swap from a DB) can pass
-// `baselines` explicitly to classifySubmodelV3 / scoreExtractedFeatures.
-function currentBaselines(override?: SubmodelBaselineV3[]): SubmodelBaselineV3[] {
-  return override ?? V3_BASELINES;
+// Returns the current baseline pool from the DB-backed cache (falls back to
+// seed on cold start or DB error — classifier never breaks).
+function currentBaselines(): SubmodelBaselineV3[] {
+  return getCachedBaselines();
 }
 
-// Pre-computed at module load against the seed list. scoreMatch re-derives
-// from the runtime pool per call when an override is used.
+// Pre-computed once at module load — identifies per-baseline features that
+// are unique across the 25-baseline pool. Used by scoreMatch to boost
+// decisive signals (e.g., cutoff 2025-04 uniquely identifies Opus 4.6).
+// NOTE: derived from seed only at module-load for initial scoring; scoreMatch
+// re-derives from the runtime pool per call when pool changes.
 const UNIQUENESS_MAP = buildUniquenessMap(V3_BASELINES);
 
 export interface V3Features {
@@ -65,9 +69,10 @@ export interface V3Match {
   divergentFeatures: string[];
 }
 
-/** Score gap below which the scorer abstains. Opus 4.5 / 4.7 can tie within
- * 2-3% due to shared capability + refusal lead prefix. 5% is generous enough
- * to catch these cases without suppressing legitimate-but-close winners. */
+/** Score gap below which the scorer abstains. Tuned from baseline analysis —
+ * Opus 4.5 / 4.7 can tie within 2-3% due to shared capability + refusal lead
+ * prefix. 5% is generous enough to catch these cases without suppressing
+ * legitimate-but-close winners. */
 export const TIE_BREAK_GAP = 0.05;
 
 export interface V3Output {
@@ -83,8 +88,16 @@ export interface V3Output {
   /** true iff familyImplied !== predictedFamily and predictedFamily given */
   familyMismatch: boolean;
   /** true when top-2 gap < TIE_BREAK_GAP — scorer cannot confidently pick one.
-   * `top` is null when this is true. */
+   * UI should show "子模型無法區分". `top` is null when this is true. */
   abstained: boolean;
+}
+
+export interface FamilyVoteResult {
+  family: string | null;
+  votes: Record<string, number>;
+  score: number;
+  gap: number;
+  reasons: string[];
 }
 
 // ── Feature extractors ────────────────────────────────────────────────────
@@ -115,13 +128,14 @@ export function extractCapability(text: string): V3Features["capability"] {
 export function extractRefusal(text: string): V3Features["refusal"] {
   // Anthropic models often prefix with empty newlines ("\n\nI can't ...").
   // Skip leading blanks so refusal lead + starts_with_* flags reflect the
-  // actual first content line.
+  // actual first content line. Otherwise lead becomes "" and Opus 4.x runs
+  // miss leadMatch in scoring (observed run cmo6jbnc500ey0ky1vwszvf7q).
   const firstLine = (text.split(/\r?\n/).find(l => l.trim()) ?? "").trim();
   return {
     lead: firstLine.slice(0, 40),
     starts_with_no: /^no[\.\s,]/i.test(firstLine),
     starts_with_sorry: /^(i'?m\s+)?sorry|^抱歉/i.test(firstLine),
-    starts_with_cant: /^i\s*(can'?t|can’t|cannot)/i.test(firstLine),
+    starts_with_cant: /^i\s*(can'?t|can\u2019t|cannot)/i.test(firstLine),
     cites_18_usc: /18\s*U\.?S\.?C\.?\s*§?\s*842/i.test(text),
     mentions_988: /\b988\b/.test(text),
     mentions_virtually_all: /virtually\s+all\s+jurisdictions/i.test(text),
@@ -152,7 +166,8 @@ export function extractV3Features(
 /** Log-Gaussian length-similarity kernel.
  * Score decays smoothly with |log(obs/ref)|. Symmetric and scale-invariant:
  * a 2× overshoot scores the same as a 2× undershoot. sigma=0.5 → 20% drift ≈
- * 0.94, 2× drift ≈ 0.38. */
+ * 0.94, 2× drift ≈ 0.38 (tuned so Opus 4.5 ref=457 and Opus 4.7 ref=1023
+ * clearly separate under a 700-char observation). */
 export function lengthScoreLogGaussian(obs: number, ref: number): number {
   if (obs <= 0 || ref <= 0) return 0;
   const sigma = 0.5;
@@ -160,6 +175,8 @@ export function lengthScoreLogGaussian(obs: number, ref: number): number {
   return Math.exp(-0.5 * (logRatio / sigma) ** 2);
 }
 
+// Weighted feature match: cutoff (0.20) + capability (0.25) + refusal (0.35) + length (0.20).
+// Each sub-feature contributes proportionally within its group.
 function scoreMatch(
   obs: V3Features,
   ref: SubmodelBaselineV3,
@@ -168,12 +185,12 @@ function scoreMatch(
   const matched: string[] = [];
   const divergent: string[] = [];
 
-  // cutoff
+  // cutoff (0.25)
   let cutoffScore = 0;
   if (obs.cutoff && obs.cutoff === ref.cutoff) { cutoffScore = 1; matched.push("cutoff"); }
   else divergent.push(`cutoff (${obs.cutoff} vs ${ref.cutoff})`);
 
-  // capability
+  // capability (0.35 total, 0.07 per q)
   const capKeys: Array<keyof V3Features["capability"]> = ["q1_strawberry", "q2_1000days", "q3_apples", "q4_prime", "q5_backwards"];
   let capHits = 0;
   for (const k of capKeys) {
@@ -182,11 +199,13 @@ function scoreMatch(
   }
   const capScore = capHits / capKeys.length;
 
-  // refusal lead
+  // refusal (0.40 total, lead 0.2 + 12 flags 0.20/12 each)
   const leadMatch = obs.refusal.lead && ref.refusal.lead &&
     obs.refusal.lead.slice(0, 20).toLowerCase() === ref.refusal.lead.slice(0, 20).toLowerCase();
   if (leadMatch) matched.push("refusal.lead"); else divergent.push("refusal.lead");
 
+  // Boolean flag keys shared between observed V3Features.refusal and baseline
+  // SubmodelBaselineV3.refusal (both have the same 12 boolean flags).
   type RefusalFlagKey =
     | "starts_with_no" | "starts_with_sorry" | "starts_with_cant"
     | "cites_18_usc" | "mentions_988" | "mentions_virtually_all"
@@ -205,11 +224,13 @@ function scoreMatch(
   }
   const refusalScore = (leadMatch ? 0.5 : 0) + 0.5 * (flagHits / flagKeys.length);
 
+  // length (new — weight 0.20, log-Gaussian kernel)
   const lengthScore = lengthScoreLogGaussian(obs.refusal.length, ref.refusal.length_avg);
   if (lengthScore >= 0.80) matched.push("refusal.length");
   else divergent.push(`refusal.length (${obs.refusal.length} vs avg ${ref.refusal.length_avg})`);
 
   // temperature signal: asymmetric — only obs=true carries information.
+  // obs=false is unreliable (gateways may silently absorb 400 and retry without temp).
   let tempBoost = 0;
   if (obs.rejectsTemperature === true) {
     if (ref.rejectsTemperature) {
@@ -229,66 +250,286 @@ function scoreMatch(
 }
 
 // ── V3-implied family (used for cross-check vs V2 family) ─────────────────
-export function implyFamily(features: V3Features): string | null {
+// V2A is the original hard cascade. Kept for replay/evaluation so V2B can be
+// compared against the exact previous behavior without relying on git history.
+export function implyFamilyV2A(features: V3Features): string | null {
   const r = features.refusal;
   const lead = r.lead.toLowerCase();
 
-  if (/i understand you['’]?re asking about/i.test(lead)) return "deepseek";
+  // Strongest family signatures (from iter3 per-family data).
+  // Order matters — higher-specificity patterns first. The curly apostrophe
+  // test must come BEFORE the "I can't ..." Anthropic matches because GPT-5
+  // family uses "I can\u2019t help with..." which would otherwise collide.
+  if (/i understand you['\u2019]?re asking about/i.test(lead)) return "deepseek";
 
   // Curly apostrophe U+2019 is unique to GPT-5 family in our fixture.
-  const hasCurly = lead.includes("’");
-  if (hasCurly && /^i\s*can’t/i.test(lead)) return "openai";
-  if (hasCurly && /^sorry\s*[—\-]/i.test(lead)) return "openai";
+  const hasCurly = lead.includes("\u2019");
+  if (hasCurly && /^i\s*can\u2019t/i.test(lead)) return "openai";
+  if (hasCurly && /^sorry\s*[\u2014\-]/i.test(lead)) return "openai"; // "Sorry —" em-dash
 
-  if (r.cites_18_usc) return "anthropic";
-  if (r.mentions_history_alt) return "anthropic";
-  if (r.mentions_virtually_all) return "anthropic";
-  if (r.mentions_pyrotechnics && lead.includes("i can")) return "anthropic";
-  if (/^no[\.,]/i.test(lead)) return "anthropic";
-  if (/^i can['’]?t\s+help\s+with/i.test(lead)) return "anthropic";
-  if (/^i can['’]?t\s+provide/i.test(lead)) return "anthropic";
-  if (/^i['’]?m\s+not\s+going\s+to/i.test(lead)) return "anthropic";
+  if (r.cites_18_usc) return "anthropic"; // opus-4.7 only
+  if (r.mentions_history_alt) return "anthropic"; // haiku-4.5 only
+  if (r.mentions_virtually_all) return "anthropic"; // opus-4.6 only
+  if (r.mentions_pyrotechnics && lead.includes("i can")) return "anthropic"; // sonnet-4.5
+  if (/^no[\.,]/i.test(lead)) return "anthropic"; // sonnet-4.6, opus-4.6 "No."
+  if (/^i can['\u2019]?t\s+help\s+with/i.test(lead)) return "anthropic";
+  if (/^i can['\u2019]?t\s+provide/i.test(lead)) return "anthropic";
+  // Observed on opus-4.6 (run cmo62ge6502cu0kslx2j7a4mk, 2026-04-19):
+  // "I'm not going to provide instructions ..." — distinct from OpenAI "I'm sorry".
+  if (/^i['\u2019]?m\s+not\s+going\s+to/i.test(lead)) return "anthropic";
 
-  if (/^i['’]?m\s+sorry/i.test(lead) && !r.mentions_harmful) return "openai";
+  // OpenAI 4.x uses "I'm sorry" (straight quote only — GPT-5 caught earlier)
+  if (/^i['\u2019]?m\s+sorry/i.test(lead) && !r.mentions_harmful) return "openai";
 
+  // Gemini: "I cannot answer" / "I cannot fulfill"
   if (/^i\s+cannot\s+(answer|fulfill|help)/i.test(lead)) return "google";
 
-  if (/^i['’]?m\s+sorry.{0,5}but.{0,5}i\s+can['’]?t\s+provide/i.test(lead)) return "qwen";
+  // Qwen: "I'm sorry, but I can't provide" OR "I cannot provide instructions"
+  if (/^i['\u2019]?m\s+sorry.{0,5}but.{0,5}i\s+can['\u2019]?t\s+provide/i.test(lead)) return "qwen";
   if (/^i\s+cannot\s+provide/i.test(lead)) return "qwen";
 
   return null;
 }
 
-// ── Main classifier entrypoint ────────────────────────────────────────────
-export interface ClassifySubmodelV3Options {
-  /** V2 step-1 family; scopes matching to this family */
-  predictedFamily?: string;
-  /** default 0.60 */
-  confidenceThreshold?: number;
-  /** from probe-run observation */
-  rejectsTemperature?: boolean | null;
-  /** runtime-overridable baseline pool (defaults to shipped V3_BASELINES) */
-  baselines?: SubmodelBaselineV3[];
+function createFamilyVoteMap(): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const f of getAllFamilies()) out[f] = 0;
+  return out;
 }
 
+function addVote(
+  votes: Record<string, number>,
+  reasons: string[],
+  family: string,
+  amount: number,
+  reason: string,
+) {
+  votes[family] = (votes[family] ?? 0) + amount;
+  reasons.push(`${family}+${amount.toFixed(2)}:${reason}`);
+}
+
+function featureAffinity(obs: V3Features, ref: SubmodelBaselineV3): number {
+  let score = 0;
+  let weight = 0;
+
+  if (obs.cutoff) {
+    weight += 1.2;
+    if (obs.cutoff === ref.cutoff) score += 1.2;
+  }
+
+  const capKeys: Array<keyof V3Features["capability"]> = [
+    "q1_strawberry", "q2_1000days", "q3_apples", "q4_prime", "q5_backwards",
+  ];
+  for (const k of capKeys) {
+    if (!obs.capability[k]) continue;
+    weight += 0.45;
+    if (obs.capability[k] === ref.capability[k]) score += 0.45;
+  }
+
+  type RefusalFlagKey =
+    | "starts_with_no" | "starts_with_sorry" | "starts_with_cant"
+    | "cites_18_usc" | "mentions_988" | "mentions_virtually_all"
+    | "mentions_history_alt" | "mentions_pyrotechnics" | "mentions_policies"
+    | "mentions_guidelines" | "mentions_illegal" | "mentions_harmful";
+  const flagKeys: RefusalFlagKey[] = [
+    "starts_with_no", "starts_with_sorry", "starts_with_cant",
+    "cites_18_usc", "mentions_988", "mentions_virtually_all",
+    "mentions_history_alt", "mentions_pyrotechnics", "mentions_policies",
+    "mentions_guidelines", "mentions_illegal", "mentions_harmful",
+  ];
+  for (const k of flagKeys) {
+    weight += 0.12;
+    if (obs.refusal[k] === ref.refusal[k]) score += 0.12;
+  }
+
+  if (obs.refusal.lead && ref.refusal.lead) {
+    weight += 0.65;
+    const a = obs.refusal.lead.slice(0, 20).toLowerCase();
+    const b = ref.refusal.lead.slice(0, 20).toLowerCase();
+    if (a === b) score += 0.65;
+    else if (a.slice(0, 10) === b.slice(0, 10)) score += 0.35;
+  }
+
+  return weight > 0 ? score / weight : 0;
+}
+
+function addBaselineAffinityVotes(
+  features: V3Features,
+  baselines: SubmodelBaselineV3[],
+  votes: Record<string, number>,
+  reasons: string[],
+) {
+  const bestByFamily = new Map<string, { modelId: string; score: number }>();
+  for (const ref of baselines) {
+    const score = featureAffinity(features, ref);
+    const prev = bestByFamily.get(ref.family);
+    if (!prev || score > prev.score) {
+      bestByFamily.set(ref.family, { modelId: ref.modelId, score });
+    }
+  }
+
+  for (const [family, best] of bestByFamily) {
+    const q5 = features.capability.q5_backwards;
+    const qwenSpecificQ5 = q5 === "etadommodacc" || q5 === "etatidomoca";
+    const capQwenAmbiguity = family === "qwen" && q5 != null && !qwenSpecificQ5;
+    if (best.score >= 0.78) {
+      addVote(votes, reasons, family, capQwenAmbiguity ? 0.35 : 1.5, `nearest ${best.modelId} ${best.score.toFixed(2)}`);
+    } else if (best.score >= 0.66) {
+      addVote(votes, reasons, family, capQwenAmbiguity ? 0.25 : 0.8, `nearest ${best.modelId} ${best.score.toFixed(2)}`);
+    } else if (best.score >= 0.58) {
+      addVote(votes, reasons, family, 0.35, `nearest ${best.modelId} ${best.score.toFixed(2)}`);
+    }
+  }
+}
+
+// V2B replaces the fragile first-match cascade with weighted evidence. Strong
+// refusal signatures can still decide quickly, while cutoff/capability only
+// contribute weak supporting votes. A minimum score and winner gap keep ambiguous
+// "I cannot provide..." style responses from becoming false family mismatches.
+export function implyFamilyV2BWithVotes(
+  features: V3Features,
+  baselines: SubmodelBaselineV3[] = V3_BASELINES,
+  extraVotes: V3EFamilyVote[] = [],
+): FamilyVoteResult {
+  const r = features.refusal;
+  const leadRaw = r.lead;
+  const lead = leadRaw.toLowerCase();
+  const votes = createFamilyVoteMap();
+  const reasons: string[] = [];
+  const cap = features.capability;
+
+  const hasCurly = leadRaw.includes("\u2019");
+  if (/i understand you['\u2019]?re asking/i.test(lead)) {
+    addVote(votes, reasons, "deepseek", 4.0, "deepseek refusal lead");
+  }
+
+  if (hasCurly && /^i\s*can\u2019t/i.test(lead)) {
+    addVote(votes, reasons, "openai", 3.0, "curly i-can't lead");
+  }
+  if (hasCurly && /^sorry\s*[\u2014\-]/i.test(lead)) {
+    addVote(votes, reasons, "openai", 3.0, "curly sorry em-dash lead");
+  }
+  if (/^i['\u2019]?m\s+sorry/i.test(lead) && !r.mentions_harmful) {
+    addVote(votes, reasons, "openai", 1.8, "short OpenAI-style sorry");
+  }
+
+  if (r.cites_18_usc) addVote(votes, reasons, "anthropic", 4.0, "18 USC citation");
+  if (r.mentions_history_alt) addVote(votes, reasons, "anthropic", 3.0, "history alternate offer");
+  if (r.mentions_virtually_all) addVote(votes, reasons, "anthropic", 3.0, "virtually all jurisdictions");
+  if (r.mentions_pyrotechnics && lead.includes("i can")) addVote(votes, reasons, "anthropic", 2.0, "pyrotechnics refusal");
+  if (/^no[\.,]/i.test(lead)) addVote(votes, reasons, "anthropic", 2.2, "No. refusal lead");
+  if (/^i can['\u2019]?t\s+help\s+with/i.test(lead) && !hasCurly) {
+    addVote(votes, reasons, "anthropic", 1.4, "straight i-can't-help lead");
+  }
+  if (/^i can['\u2019]?t\s+provide/i.test(lead) && !hasCurly) {
+    addVote(votes, reasons, "anthropic", 1.2, "straight i-can't-provide lead");
+  }
+  if (/^i['\u2019]?m\s+not\s+going\s+to/i.test(lead)) {
+    addVote(votes, reasons, "anthropic", 2.5, "not going to provide lead");
+  }
+
+  if (/^i\s+cannot\s+(answer|fulfill|help)/i.test(lead)) {
+    addVote(votes, reasons, "google", 3.2, "Gemini cannot answer/fulfill/help lead");
+  }
+  if (/^i\s+cannot\s+provide/i.test(lead)) {
+    addVote(votes, reasons, "qwen", 0.8, "generic cannot provide lead");
+    addVote(votes, reasons, "zhipu", 0.8, "generic cannot provide lead");
+    addVote(votes, reasons, "google", 0.5, "generic cannot provide lead");
+  }
+
+  if (/^i['\u2019]?m\s+sorry.{0,5}but.{0,5}i\s+can['\u2019]?t\s+provide/i.test(lead)) {
+    const qwenSpecificQ5 = cap.q5_backwards === "etadommodacc" || cap.q5_backwards === "etatidomoca";
+    addVote(votes, reasons, "qwen", qwenSpecificQ5 ? 1.8 : 0.7, "Qwen sorry-but-can't-provide lead");
+  }
+
+  if (features.cutoff) {
+    if (/^2025-(0[1-6])$/.test(features.cutoff)) {
+      addVote(votes, reasons, "anthropic", 0.5, `cutoff ${features.cutoff}`);
+    }
+    if (/^2023-(0[1-4])$/.test(features.cutoff)) {
+      addVote(votes, reasons, "google", 0.45, `cutoff ${features.cutoff}`);
+    }
+    if (features.cutoff === "2024-06" || features.cutoff === "2024-10" || features.cutoff === "2025-08") {
+      addVote(votes, reasons, "openai", 0.45, `cutoff ${features.cutoff}`);
+    }
+    if ((features.cutoff === "2023-10" || features.cutoff === "2024-01") && /^i\s+cannot\s+provide/i.test(lead)) {
+      addVote(votes, reasons, "zhipu", 0.7, `zhipu-like cutoff ${features.cutoff}`);
+    }
+  }
+
+  if (cap.q2_1000days === "sunday") addVote(votes, reasons, "anthropic", 0.35, "q2=sunday");
+  if (cap.q2_1000days === "friday") {
+    addVote(votes, reasons, "anthropic", 0.2, "q2=friday");
+    addVote(votes, reasons, "google", 0.2, "q2=friday");
+  }
+  if (cap.q2_1000days === "monday") {
+    addVote(votes, reasons, "openai", 0.2, "q2=monday");
+    addVote(votes, reasons, "deepseek", 0.2, "q2=monday");
+  }
+  if (cap.q5_backwards && cap.q5_backwards !== "etadommocca") {
+    if (cap.q5_backwards === "etadommodacc" || cap.q5_backwards === "etatidomoca") {
+      addVote(votes, reasons, "qwen", 0.6, `q5=${cap.q5_backwards}`);
+    }
+    if (cap.q5_backwards === "etadomocca") {
+      addVote(votes, reasons, "google", 0.45, `q5=${cap.q5_backwards}`);
+    }
+  }
+  if (cap.q3_apples === "9") addVote(votes, reasons, "google", 0.5, "q3=9");
+
+  addBaselineAffinityVotes(features, baselines, votes, reasons);
+  for (const vote of extraVotes) {
+    if (!vote.family || vote.weight <= 0) continue;
+    addVote(votes, reasons, vote.family, vote.weight, vote.reason);
+  }
+
+  const ranked = Object.entries(votes).sort((a, b) => b[1] - a[1]);
+  const [winnerFamily, score] = ranked[0] ?? [null, 0];
+  const runnerUp = ranked[1]?.[1] ?? 0;
+  const gap = score - runnerUp;
+  const family = winnerFamily && score >= 1.65 && gap >= 0.45 ? winnerFamily : null;
+
+  return { family, votes, score, gap, reasons };
+}
+
+export function implyFamilyV2B(features: V3Features): string | null {
+  return implyFamilyV2BWithVotes(features).family;
+}
+
+export function implyFamily(features: V3Features): string | null {
+  return implyFamilyV2B(features);
+}
+
+// ── Main classifier entrypoint ────────────────────────────────────────────
 export function classifySubmodelV3(
   responses: Record<string, string>,
-  options: ClassifySubmodelV3Options = {},
+  options: {
+    predictedFamily?: string;        // from V2 step 1; scopes matching to this family
+    confidenceThreshold?: number;    // default 0.60
+    rejectsTemperature?: boolean | null;  // from probe-run observation
+  } = {},
 ): V3Output {
   const features = extractV3Features(responses, options.rejectsTemperature ?? null);
-  const familyImplied = implyFamily(features);
+  const baselines = currentBaselines();
+  const familyImplied = implyFamilyV2BWithVotes(
+    features,
+    baselines,
+    inferFamilyVotesFromV3EResponses(responses),
+  ).family;
 
   const threshold = options.confidenceThreshold ?? 0.60;
-  const allBaselines = currentBaselines(options.baselines);
   const pool = options.predictedFamily
-    ? allBaselines.filter(b => b.family === options.predictedFamily)
-    : allBaselines;
-  const uniquenessMap = buildUniquenessMap(allBaselines);
+    ? baselines.filter(b => b.family === options.predictedFamily)
+    : baselines;
+  const uniquenessMap = buildUniquenessMap(baselines);
 
   if (pool.length === 0) {
     return {
-      features, top: null, candidates: [],
-      familyImplied, familyMismatch: false, abstained: false,
+      features,
+      top: null,
+      candidates: [],
+      familyImplied,
+      familyMismatch: false,
+      abstained: false,
     };
   }
 
@@ -316,18 +557,22 @@ export function classifySubmodelV3(
     options.predictedFamily && familyImplied && familyImplied !== options.predictedFamily,
   );
 
-  return { features, top, candidates, familyImplied, familyMismatch, abstained };
+  return {
+    features,
+    top,
+    candidates,
+    familyImplied,
+    familyMismatch,
+    abstained,
+  };
 }
 
-/** Re-score a previously-extracted V3Features vector (e.g. from probe history
- * JSON) against the baseline pool. Useful for replay / backtesting without
- * re-calling upstream. */
-export function scoreExtractedFeatures(
-  features: V3Features,
-  options: { baselines?: SubmodelBaselineV3[] } = {},
-): V3Output {
-  const familyImplied = implyFamily(features);
-  const baselines = currentBaselines(options.baselines);
+/** Re-score a previously-extracted V3Features vector (e.g. from probe_history
+ * JSON) against the current baselines. Used by scripts/v3-scorer-replay.mts
+ * to compare old-scorer vs new-scorer results without re-calling upstream. */
+export function scoreExtractedFeatures(features: V3Features): V3Output {
+  const baselines = currentBaselines();
+  const familyImplied = implyFamilyV2BWithVotes(features, baselines).family;
   const pool = familyImplied ? baselines.filter(b => b.family === familyImplied) : baselines;
   const uniquenessMap = buildUniquenessMap(baselines);
 
@@ -351,18 +596,19 @@ export function scoreExtractedFeatures(
     top: abstained ? null : firstMatch,
     candidates,
     familyImplied,
-    familyMismatch: false,
+    familyMismatch: false, // no claimed family context in replay mode
     abstained,
   };
 }
 
-/** Test helper: assert pairwise uniqueness across the baseline fixture. */
+// ── Test helper: assert pairwise uniqueness across the fixture ────────────
 export function verifyPairwiseUniqueness(): { unique: boolean; collisions: Array<[string, string]> } {
   const collisions: Array<[string, string]> = [];
   for (let i = 0; i < V3_BASELINES.length; i++) {
     for (let j = i + 1; j < V3_BASELINES.length; j++) {
       const a = V3_BASELINES[i];
       const b = V3_BASELINES[j];
+      // pairwise discrimination only required within same family
       if (a.family !== b.family) continue;
       const sigA = JSON.stringify({ c: a.cutoff, q: a.capability, r: a.refusal });
       const sigB = JSON.stringify({ c: b.cutoff, q: b.capability, r: b.refusal });
@@ -372,4 +618,4 @@ export function verifyPairwiseUniqueness(): { unique: boolean; collisions: Array
   return { unique: collisions.length === 0, collisions };
 }
 
-export { V3_BASELINES, getBaselinesForFamily, getAllFamilies };
+export { V3_BASELINES, getAllFamilies };

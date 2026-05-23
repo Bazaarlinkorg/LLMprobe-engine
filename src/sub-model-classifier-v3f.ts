@@ -8,17 +8,14 @@
 // Motivating case: openai/gpt-5.5 (isRoundRate=1.0) vs openai/gpt-5.3-codex
 // (isRoundRate=0.33). V3E gave them gap 4.58pp (abstained). V3F widens to
 // ~8pp by giving the round-rate signal equal weight to the value signal.
-//
-// See paper "Model Substitution in the Black-Box LLM API Resale Market"
-// (2026-04-26), §3.6, for the full motivation and evaluation.
 
 import {
   extractRefusalLadder,
   extractFormatting,
   extractUncertainty,
-  DEFAULT_V3E_WEIGHTS,
   type V3EObserved,
   type V3EWeights,
+  DEFAULT_V3E_WEIGHTS,
   type FormattingFeatures,
   type UncertaintyFeatures,
 } from "./sub-model-classifier-v3e.js";
@@ -40,13 +37,27 @@ export interface V3FOutput {
   abstained: boolean;
 }
 
-function ladderSimilarity(obsVec: number[], refVecAvg: number[]): number {
+// L8 dropped for anthropic family — same rationale as classifier-v3e.ts.
+// See plan 2026-05-12-pl-v3e-skip-l8-for-claude.md.
+const ANTHROPIC_SKIP_LADDER_INDICES = [7] as const;
+
+function ladderSimilarity(
+  obsVec: number[],
+  refVecAvg: number[],
+  skipIndices: readonly number[] = [],
+): number {
   if (obsVec.length !== refVecAvg.length) return 0;
+  const skip = new Set(skipIndices);
   let sumSq = 0;
+  let active = 0;
   for (let i = 0; i < obsVec.length; i++) {
+    if (skip.has(i)) continue;
     sumSq += (obsVec[i] - refVecAvg[i]) ** 2;
+    active++;
   }
-  return Math.max(0, 1 - sumSq / 12);
+  if (active === 0) return 1;
+  const norm = (12 * active) / obsVec.length;
+  return Math.max(0, 1 - sumSq / norm);
 }
 
 function formatSimilarity(obs: FormattingFeatures, ref: SubmodelBaselineV3E["formatting"]): number {
@@ -85,7 +96,8 @@ export function scoreV3FMatch(
   const matched: string[] = [];
   const divergent: string[] = [];
 
-  const ladder = ladderSimilarity(obs.refusalLadder.vector, ref.refusalLadder.vectorAvg);
+  const skip = ref.family === "anthropic" ? ANTHROPIC_SKIP_LADDER_INDICES : [];
+  const ladder = ladderSimilarity(obs.refusalLadder.vector, ref.refusalLadder.vectorAvg, skip);
   if (ladder >= 0.85) matched.push(`ladder(${ladder.toFixed(2)})`);
   else divergent.push(`ladder(${ladder.toFixed(2)})`);
 

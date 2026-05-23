@@ -76,10 +76,12 @@ export {
   extractCapability as extractV3Capability,
   extractRefusal as extractV3Refusal,
   implyFamily as implyFamilyV3,
+  implyFamilyV2A,
+  implyFamilyV2B,
+  implyFamilyV2BWithVotes,
   lengthScoreLogGaussian,
   verifyPairwiseUniqueness,
   V3_BASELINES,
-  getBaselinesForFamily,
   getAllFamilies,
   TIE_BREAK_GAP,
 } from "./sub-model-classifier-v3.js";
@@ -87,8 +89,11 @@ export type {
   V3Features,
   V3Match,
   V3Output,
-  ClassifySubmodelV3Options,
+  FamilyVoteResult,
 } from "./sub-model-classifier-v3.js";
+export {
+  getBaselinesForFamily,
+} from "./sub-model-baselines-v3.js";
 export type { SubmodelBaselineV3 } from "./sub-model-baselines-v3.js";
 
 export {
