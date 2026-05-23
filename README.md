@@ -5,6 +5,8 @@
 針對 OpenAI-compatible API 端點的開源 CLI 測試工具與 Node.js 函式庫。  
 執行品質、安全性、完整性、身份識別探針，產出 0–100 評分報告。
 
+> **v0.8.0** (2026-05-24)：新增 **層⑤ V4 集成融合分類器**（V3 Scoped + V3 Global + IKP 四階優先級融合），新增 **IKP（Inherent Knowledge Probe）5 個事實探針**用於兄弟模型一致性驗證，新增 **Bayesian 子模型評分**與 **identity-v2 家族分類器**，新增 **LLMmap 風格基準匹配投票**（`baseline-match-votes`）。28 個測試檔 / 298 個測試。V4 攻擊準確度方法論見 [`docs/reports/2026-05-10-v4-attack-accuracy.md`](docs/reports/2026-05-10-v4-attack-accuracy.md)。
+>
 > **v0.7.0** (2026-04-26)：新增方法層 **層④（V3E / V3F）行為向量擴展分類器** — 拒絕梯度（8 探針）、格式偏好（3 探針）、數值不確定性（1 探針）共 12 個新 V3E 探針；附帶 22 個熱門模型的離線 baseline 快照（Anthropic / OpenAI / Google / DeepSeek 旗艦線）。完整方法論與實證測量見論文 [`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md)（中文版）/ [`.en.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.en.md)（英文版）。
 >
 > **v0.6.0**：新增 26 個探針（Identity 語言指紋 C–G 方向 × 18 個、Sub-Model 子模型識別組 × 8 個）、新增 Sub-Model V3 三探針（`submodel_cutoff` / `submodel_capability` / `submodel_refusal`）、新增 `fingerprint-features-v2` / `fingerprint-build-helpers` 模組
@@ -388,7 +390,7 @@ bazaarlink-probe run \
 | multimodal_image | keyword_match | 圖片內容解析（base64 PNG 紅色像素） |
 | multimodal_pdf | keyword_match | PDF 文件解析（base64 PDF 含關鍵字） |
 
-### Sub-Model（子模型識別）— 11 個探針 *(全部 neutral — 不計入分數)*
+### Sub-Model（子模型識別）— 16 個探針 *(全部 neutral — 不計入分數)*
 
 Sub-Model 探針收集每個 checkpoint 的固有行為特徵，供子模型分類器（`sub-model-matcher.ts`）用於區分同家族內的不同版本（如 Opus / Sonnet / Haiku）。
 
@@ -427,6 +429,50 @@ Sub-Model 探針收集每個 checkpoint 的固有行為特徵，供子模型分�
 | submodel_cutoff | feature_extract | 直問 training cutoff（YYYY-MM 格式，各 checkpoint 自報值穩定唯一） |
 | submodel_capability | feature_extract | 5 題能力電池（strawberry/星期推算/分數/第100質數/拼字反轉），每個 checkpoint 有固定錯誤向量 |
 | submodel_refusal | feature_extract | 拒答模板提取（Opus 4.7 含 18 U.S.C. § 842 引用，跨 family 幾乎唯一） |
+
+#### IKP — Inherent Knowledge Probes（5 個，v0.8.0 新增）
+
+短答案事實探針，每題答案在同家族不同 checkpoint 之間**穩定但不同**。
+由 `sub-model-classifier-ikp` 收集,作為 V4 集成融合的知識錨點。
+
+| ID | 評分方式 | 說明 |
+|---|---|---|
+| ikp_t3_domain_fact | feature_extract | TLS 1.3 handshake：哪個訊息攜帶 server certificate |
+| ikp_t4_obscure_fact | feature_extract | Raft 共識：保證 leader 包含所有已 committed log 的不變式名稱 |
+| ikp_t4_bio_fact | feature_extract | 生化：chymotrypsin-like serine protease 的 catalytic triad 殘基 |
+| ikp_t5_deep_fact | feature_extract | Paxos Made Simple：higher-numbered chosen proposal 的 safety property |
+| ikp_t5_codegen_edge | feature_extract | C++ overload：約束不滿足而被排除的候選函式術語 |
+
+---
+
+## 層⑤ V4 集成融合（v0.8.0）
+
+V4 把 4 個分類器的輸出按優先級融合成單一裁決：
+
+```
+1. V3 Scoped 命中 + V3 Global 同家族 → 保留 V3 Scoped
+   (保護誠實聲明,維持 V3F 風格的家族內兄弟區分)
+
+2. V3 Scoped 命中 + V3 Global 高信心跨家族 → 採 V3 Global
+   (抓出 V3 Scoped 被聲明矇蔽的跨家族冒充)
+
+3. V3 Scoped abstain + V3 Global 命中 → V3 Global（跨家族救援）
+
+4. V3 Scoped abstain + V3 Global abstain + IKP 命中 → IKP（最後防線）
+
+5. 其他 → abstain
+```
+
+V4 還對 openai/gpt-5.5 ↔ openai/gpt-5.3-codex 這對特徵 100% 重疊的兄弟對啟動
+V3F 仲裁(只有 V3F 的 `isRoundRate` 訊號能分辨它們)。
+
+**注意**：v0.8.0 的 V4 是匯出函式 `fuseToV4()`,呼叫方需要自己組合 V3/V3E/V3F/IKP
+的輸出再餵給 V4。 OSS 的 `runProbes` runner 目前不自動執行 V3 系列(與 v0.7.x 相同),
+這些分類器都從 public API 暴露讓使用者自行組合。完整 pipeline 自動 wiring 在
+v0.9.0 規劃中。
+
+完整方法論與攻擊準確度測量見
+[`docs/reports/2026-05-10-v4-attack-accuracy.md`](docs/reports/2026-05-10-v4-attack-accuracy.md)。
 
 ---
 
@@ -832,7 +878,7 @@ npm run build   # 編譯 TypeScript → dist/
 ### 執行測試
 
 ```bash
-npm test                        # 執行全部 214 個測試（約 1 秒）
+npm test                        # 執行全部 298 個測試（約 1 秒）
 npm test -- --reporter=verbose  # 顯示每個測試的名稱與耗時
 npm test -- --watch             # 監聽模式，存檔自動重跑
 ```
@@ -840,12 +886,12 @@ npm test -- --watch             # 監聽模式，存檔自動重跑
 測試結果範例：
 
 ```
- Test Files  19 passed (19)
-      Tests  214 passed (214)
-   Duration  ~1.2s
+ Test Files  28 passed (28)
+      Tests  298 passed (298)
+   Duration  ~0.8s
 ```
 
-### 測試涵蓋範圍（19 個測試檔，214 個測試）
+### 測試涵蓋範圍（28 個測試檔，298 個測試）
 
 | 測試檔 | 測試數 | 涵蓋模組 | 主要驗證項目 |
 |---|---|---|---|

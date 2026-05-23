@@ -142,3 +142,100 @@ export {
   getCachedV3EBaselines,
   clearV3ECache,
 } from "./sub-model-baselines-v3e-store.js";
+
+// ── v0.8.0: V4 Ensemble Fuse + IKP knowledge probes ──────────────────────
+// V4 fuses V3 Scoped + V3 Global + IKP + V3F via 4-tier priority.
+// See docs/reports/2026-05-10-v4-attack-accuracy.md.
+
+export {
+  fuseToV4,
+  V4_GLOBAL_CONFIDENCE_THRESHOLD,
+  V3F_TIEBREAKER_THRESHOLD,
+  V3F_TIEBREAKER_GAP_MAX,
+} from "./sub-model-classifier-v4.js";
+export type {
+  V4Match,
+  V4Output,
+  V4FuseSource,
+  V3LikeAdapter,
+} from "./sub-model-classifier-v4.js";
+
+export {
+  classifySubmodelIKP,
+  fuseV3WithIKP,
+  IKP_PROBE_IDS,
+} from "./sub-model-classifier-ikp.js";
+export type {
+  IkpOutput,
+  IkpMatch,
+  IkpBaselineRow,
+} from "./sub-model-classifier-ikp.js";
+
+export {
+  scoreSubModels,
+  CONFIDENCE_THRESHOLD as BAYESIAN_CONFIDENCE_THRESHOLD,
+} from "./sub-model-bayesian.js";
+export type {
+  SubModelPosterior,
+  SubModelResult,
+  SubModelBaselineRow,
+} from "./sub-model-bayesian.js";
+
+export { computeBaselineMatchVotes, responseSimilarity, baselineModelIdToFamily } from "./baseline-match-votes.js";
+export type { BaselineRow } from "./baseline-match-votes.js";
+
+export {
+  modelIdToFamily,
+  scoreLinguisticOnly,
+  scoreFullFeatureSet,
+  computeAccuracy,
+} from "./backtest-scorer.js";
+export type { AccuracyStats } from "./backtest-scorer.js";
+
+export {
+  categoryHitRate,
+  relativeCategoryFitness,
+} from "./fingerprint-category-hit-rate.js";
+
+export {
+  classifyIdentityV2,
+  classifyIdentityV2A,
+  classifyIdentityV2B,
+} from "./identity-classifier-v2.js";
+export type {
+  ClassifyV2Input,
+  ClassifyV2Output,
+} from "./identity-classifier-v2.js";
+
+export {
+  createBaselineStore,
+  defaultBaselineStore,
+  getCachedBaselines,
+  getCachedBaselinesForFamily,
+  getCachedFamilies,
+  invalidateBaselineCache,
+} from "./sub-model-baselines-v3-store.js";
+export type {
+  BaselineStore,
+  BaselineStoreOptions,
+} from "./sub-model-baselines-v3-store.js";
+
+export {
+  extractSubModelFeatures,
+  extractPiDistributionFeatures,
+} from "./submodel-features.js";
+export type { SubModelExtractorInput } from "./submodel-features.js";
+
+export {
+  flattenLinguisticFeatures,
+  matchSubModelsLinguistic,
+  identifySubModelBayesian,
+  baselinesFromDbRows,
+} from "./sub-model-matcher.js";
+
+export {
+  bayesianScoreDisplayCalibrated,
+} from "./fingerprint-bayesian.js";
+export type {
+  CalibratedScoreOptions,
+} from "./fingerprint-bayesian.js";

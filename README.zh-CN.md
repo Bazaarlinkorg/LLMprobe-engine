@@ -5,6 +5,8 @@
 针对 OpenAI-compatible API 端点的开源 CLI 测试工具与 Node.js 函数库。  
 执行品质、安全性、完整性探针，产出 0–100 评分报告。
 
+> **v0.8.0** (2026-05-24)：新增 **层⑤ V4 集成融合分类器**（V3 Scoped + V3 Global + IKP 四阶优先级融合），新增 **IKP（Inherent Knowledge Probe）5 个事实探针**用于兄弟模型一致性验证，新增 **Bayesian 子模型评分**与 **identity-v2 家族分类器**，新增 **LLMmap 风格基准匹配投票**（`baseline-match-votes`）。28 个测试档 / 298 个测试。V4 攻击准确度方法论见 [`docs/reports/2026-05-10-v4-attack-accuracy.md`](docs/reports/2026-05-10-v4-attack-accuracy.md)。
+>
 > **v0.7.0** (2026-04-26)：新增方法层 **层④（V3E / V3F）行为向量扩展分类器** — 拒绝梯度（8 探针）、格式偏好（3 探针）、数值不确定性（1 探针）共 12 个新 V3E 探针；附带 22 个热门模型的离线 baseline 快照（Anthropic / OpenAI / Google / DeepSeek 旗舰线）。完整方法论与实证测量见论文 [`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md)（繁中）/ [`.en.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.en.md)（英文）。
 >
 > **v0.6.0**：新增 26 个探针（Identity 语言指纹 C–G 方向 × 18 个、Sub-Model 子模型识别组 × 8 个）、新增 Sub-Model V3 三探针（`submodel_cutoff` / `submodel_capability` / `submodel_refusal`）、新增 `fingerprint-features-v2` / `fingerprint-build-helpers` 模块。

@@ -5,6 +5,8 @@
 An open-source CLI tool and Node.js library for testing OpenAI-compatible API endpoints.  
 Runs a suite of quality, security, and integrity probes and generates a 0–100 score report.
 
+> **v0.8.0** (2026-05-24): Adds **Layer ⑤ V4 ensemble fuse** (V3 Scoped + V3 Global + IKP via 4-tier priority), **5 IKP (Inherent Knowledge Probe) sub-model identifiers** for sibling-checkpoint consistency, **Bayesian sub-model scoring**, the **identity-classifier-v2 family classifier**, and **LLMmap-style baseline match votes** (`baseline-match-votes`). 28 test files / 298 tests. V4 attack-accuracy methodology: [`docs/reports/2026-05-10-v4-attack-accuracy.md`](docs/reports/2026-05-10-v4-attack-accuracy.md).
+>
 > **v0.7.0** (2026-04-26): Adds Layer ④ (V3E / V3F) — the behavioral-vector extension classifier introduced in our measurement paper. 12 new V3E probes spanning a refusal-boundary ladder (8), formatting idiosyncrasy (3), and calibrated uncertainty (1); ships with an offline baseline snapshot for 22 frontier models (Anthropic / OpenAI / Google / DeepSeek). See the companion paper at [`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.en.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.en.md) (English) / [`.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md) (Traditional Chinese).
 >
 > **v0.6.0**: Added 26 probes (Identity linguistic fingerprint directions C–G × 18, Sub-Model identification group × 8), new Sub-Model V3 discriminators (`submodel_cutoff` / `submodel_capability` / `submodel_refusal`), new `fingerprint-features-v2` / `fingerprint-build-helpers` modules.
