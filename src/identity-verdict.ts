@@ -12,6 +12,7 @@
 
 export type VerdictStatus =
   | "clean_match"                    // 三向與 claim 一致
+  | "clean_match_family_only"        // 家族相符但子模型未驗證、信號偏弱、或缺資料
   | "clean_match_submodel_mismatch"  // 家族相符但 V3 高信心指向不同子模型
   | "plain_mismatch"                 // 三向一致但都跟 claim 不同（沒偽裝，只是換模型）
   | "spoof_behavior_induced"         // surface/v3 洩漏真相，behavior 被 prompt 誘導成 claim 家族
@@ -22,8 +23,21 @@ export type VerdictStatus =
 /** V3 score at/above this is treated as a confident sub-model call. Below
  * this, we do not assert sub-model match or mismatch — the top pick is only
  * ~1% ahead of the runner-up in tie cases, which is not enough to claim
- * anything. Surfaces to UI as "信心不足，僅供參考". */
+ * anything. */
 export const V3_HIGH_CONFIDENCE = 0.80;
+
+/** Minimum signal score required for "complete match" (clean_match) verdict.
+ *  Below this, family unanimity alone isn't strong enough to assert sub-model
+ *  identity — falls back to clean_match_family_only. */
+export const CLEAN_MATCH_MIN_SCORE = 0.65;
+
+/** Coverage gap (errors / total) above which the verdict is forced to
+ *  family_only with low confidence regardless of signal strength. */
+export const COVERAGE_GAP_FORCE_FAMILY_ONLY = 0.15;
+
+/** Coverage gap above which confidence is demoted by one band even if signals
+ *  are otherwise strong. */
+export const COVERAGE_GAP_DEMOTE_CONFIDENCE = 0.05;
 
 export type ConfidenceBand = "high" | "medium" | "low";
 
@@ -33,6 +47,13 @@ export interface VerdictInput {
   surface: { family: string; score: number } | null;
   behavior: { family: string; score: number } | null;
   v3: { family: string; modelId: string; displayName: string; score: number } | null;
+  /** Optional V3F (V3 + isRoundRate ensemble). Used as a second-opinion
+   *  classifier to veto false-positive spoof flags when behavior alone diverges. */
+  v3f?: { family: string; score: number } | null;
+  /** Optional coverage stats. When errors/total > 0.15, force family_only
+   *  with confidence=low even if other signals look strong, since missing
+   *  data could be sampling bias. */
+  coverage?: { errors: number; total: number };
 }
 
 export interface VerdictResult {
@@ -57,7 +78,7 @@ function bareName(modelId: string): string {
 }
 
 export function computeVerdict(input: VerdictInput): VerdictResult {
-  const { claimedFamily, surface, behavior, v3 } = input;
+  const { claimedFamily, surface, behavior, v3, v3f } = input;
 
   if (!surface && !behavior && !v3) {
     return {
@@ -66,7 +87,6 @@ export function computeVerdict(input: VerdictInput): VerdictResult {
     };
   }
 
-  // Collect "votes" from the three signals that have usable confidence.
   const USABLE_SURFACE = 0.30;
   const USABLE_BEHAVIOR = 0.40;
   const USABLE_V3 = 0.50;
@@ -90,7 +110,6 @@ export function computeVerdict(input: VerdictInput): VerdictResult {
     reasoning.push(`${s.id} ${s.label}: ${s.family} (${Math.round(s.score * 100)}%)${tag}`);
   }
 
-  // Unanimous (≥2 signals agree on same family): clean_match or plain_mismatch.
   if (signals.length >= 2) {
     const first = signals[0].family;
     const unanimous = signals.every(s => s.family === first);
@@ -98,39 +117,80 @@ export function computeVerdict(input: VerdictInput): VerdictResult {
       const claimAgrees = claimedFamily == null || claimedFamily === first;
       const trueModel = v3 && v3.family === first ? v3.displayName : null;
       if (claimAgrees) {
-        // Sub-model mismatch detection: family matches but V3 is confident
-        // enough AND points to a different sub-model than the one claimed.
+        const coverageGap = input.coverage && input.coverage.total > 0
+          ? input.coverage.errors / input.coverage.total
+          : 0;
+        const minScore = Math.min(...signals.map(s => s.score));
+
         if (
           v3 &&
           v3.family === first &&
-          v3.score >= V3_HIGH_CONFIDENCE &&
+          v3.score >= 0.60 &&
           input.claimedModel &&
           bareName(v3.modelId) !== bareName(input.claimedModel)
         ) {
+          const isHighConf = v3.score >= V3_HIGH_CONFIDENCE;
           reasoning.push(
-            `sub-model mismatch: claim=${bareName(input.claimedModel)} v3=${bareName(v3.modelId)} @${Math.round(v3.score * 100)}%`,
+            isHighConf
+              ? `sub-model mismatch: claim=${bareName(input.claimedModel)} v3=${bareName(v3.modelId)} @${Math.round(v3.score * 100)}%`
+              : `sub-model suspect: claim=${bareName(input.claimedModel)} v3=${bareName(v3.modelId)} @${Math.round(v3.score * 100)}% (low confidence — possibly real ${v3.displayName} with system-prompt-modified style)`,
           );
           return {
             status: "clean_match_submodel_mismatch",
             trueFamily: first,
-            trueModel,
+            trueModel: v3 && v3.family === first ? v3.displayName : null,
             spoofMethod: null,
-            confidence: signals.length >= 3 ? "high" : "medium",
+            confidence: isHighConf
+              ? (signals.length >= 3 ? "high" : "medium")
+              : "low",
             reasoning,
           };
         }
-        // Borderline V3: family confirmed but sub-model match is weak (just
-        // over the 60% threshold). Common pattern is "wrapper relay using
-        // real model X but injecting a system prompt that nudges refusal
-        // tone / vocabulary, which lowers our V3 lead-match score".
-        if (v3 && v3.family === first && v3.score >= 0.60 && v3.score < 0.75) {
-          reasoning.push(
-            `wrapper-hint: V3 sub-model match is borderline (${Math.round(v3.score * 100)}%) — possibly real ${v3.displayName} with system-prompt-modified refusal style`,
-          );
+
+        const v3Confirms = v3 != null
+          && v3.family === first
+          && (input.claimedModel ? bareName(v3.modelId) === bareName(input.claimedModel) : true);
+        const v3Abstained = v3 == null;
+        const signalsWeak = minScore < CLEAN_MATCH_MIN_SCORE;
+        const coverageHigh = coverageGap > COVERAGE_GAP_FORCE_FAMILY_ONLY;
+        const coverageMid  = coverageGap > COVERAGE_GAP_DEMOTE_CONFIDENCE;
+
+        if (v3Abstained || signalsWeak || coverageHigh) {
+          const confidence: ConfidenceBand =
+            coverageHigh || signalsWeak ? "low"
+            : minScore >= 0.80 && !coverageMid ? "high"
+            : "medium";
+
+          if (v3Abstained) {
+            reasoning.push(`family_only: V3 abstained (no usable sub-model signal)`);
+          }
+          if (signalsWeak) {
+            reasoning.push(`family_only: min signal ${Math.round(minScore * 100)}% < ${Math.round(CLEAN_MATCH_MIN_SCORE * 100)}% threshold`);
+          }
+          if (coverageHigh) {
+            reasoning.push(`family_only: coverage gap ${Math.round(coverageGap * 100)}% > ${Math.round(COVERAGE_GAP_FORCE_FAMILY_ONLY * 100)}% threshold`);
+          }
+
+          return {
+            status: "clean_match_family_only",
+            trueFamily: first,
+            trueModel: v3 && v3.family === first ? v3.displayName : null,
+            spoofMethod: null,
+            confidence,
+            reasoning,
+          };
         }
+
+        const baseConfidence: ConfidenceBand = signals.length >= 3 ? "high" : "medium";
+        const finalConfidence: ConfidenceBand = coverageMid
+          ? (baseConfidence === "high" ? "medium" : "low")
+          : baseConfidence;
         return {
-          status: "clean_match", trueFamily: first, trueModel,
-          spoofMethod: null, confidence: signals.length >= 3 ? "high" : "medium",
+          status: "clean_match",
+          trueFamily: first,
+          trueModel: v3Confirms && v3 ? v3.displayName : null,
+          spoofMethod: null,
+          confidence: finalConfidence,
           reasoning,
         };
       }
@@ -142,20 +202,30 @@ export function computeVerdict(input: VerdictInput): VerdictResult {
     }
   }
 
-  // Split vote: signals disagree. Apply "claim is the 4th signal" rule.
   if (claimedFamily && signals.length >= 2) {
     const diverging = signals.filter(s => s.family !== claimedFamily);
     const matching  = signals.filter(s => s.family === claimedFamily);
 
-    // Special case: only behavior diverges. Classic selfclaim-forgery —
-    // surface and v3 can be manipulated via prompt (self-claim / formatting /
-    // speed), but ling_* factual probes are hard to fake. When behavior is
-    // confident enough (>= 0.70), trust it as the truth signal.
     if (
       diverging.length === 1 &&
       diverging[0].label === "behavior" &&
       diverging[0].score >= 0.70
     ) {
+      const v3VetoesSpoof = v3 != null && v3.family === claimedFamily && v3.score >= V3_HIGH_CONFIDENCE;
+      const v3fOk = v3f == null ? true : (v3f.family === claimedFamily && v3f.score >= V3_HIGH_CONFIDENCE);
+      if (v3VetoesSpoof && v3fOk) {
+        return {
+          status: "ambiguous",
+          trueFamily: null,
+          trueModel: null,
+          spoofMethod: null,
+          confidence: "low",
+          reasoning: [
+            ...reasoning,
+            `↳ v3+v3f both ≥${Math.round(V3_HIGH_CONFIDENCE * 100)}% match claim → behavior-alone divergence treated as stylistic, not spoof`,
+          ],
+        };
+      }
       return {
         status: "spoof_selfclaim_forged",
         trueFamily: diverging[0].family,
@@ -166,9 +236,6 @@ export function computeVerdict(input: VerdictInput): VerdictResult {
       };
     }
 
-    // Special case: only surface diverges (behavior + any other signal match claim).
-    // The behavior column is attack-resistant; if it agrees with claim but surface
-    // doesn't, the surface self-claim is lying → behavior-induced spoof.
     if (
       diverging.length === 1 &&
       diverging[0].label === "surface" &&

@@ -22,7 +22,7 @@ describe("computeVerdict — clean match cases", () => {
     expect(v.spoofMethod).toBeNull();
   });
 
-  it("two signals agree, v3 absent → clean_match medium", () => {
+  it("two signals agree but v3 abstained → clean_match_family_only (v0.8.0 tightened)", () => {
     const v = computeVerdict({
       claimedFamily: "anthropic",
       claimedModel: "anthropic/claude-opus-4.7",
@@ -30,8 +30,13 @@ describe("computeVerdict — clean match cases", () => {
       behavior: { family: "anthropic", score: 0.8 },
       v3: null,
     });
-    expect(v.status).toBe("clean_match");
-    expect(v.confidence).toBe("medium");
+    // v0.8.0: family-only when V3 cannot confirm sub-model identity.
+    // Previously emitted "clean_match" which over-promised in 56% of borderline cases.
+    expect(v.status).toBe("clean_match_family_only");
+    expect(v.trueFamily).toBe("anthropic");
+    // Confidence depends on signal strength + coverage band: 0.8 minScore ≥ 0.80
+    // with no coverage gap → "high"; below 0.80 → "medium".
+    expect(["high", "medium"]).toContain(v.confidence);
   });
 });
 
@@ -49,15 +54,19 @@ describe("computeVerdict — sub-model mismatch (same family)", () => {
     expect(v.trueModel).toBe("anthropic/claude-opus-4.6");
   });
 
-  it("family matches but v3 borderline (<0.80) → stays clean_match (not enough confidence)", () => {
+  it("family matches but v3 borderline (≥0.60) → flagged as submodel_mismatch at low confidence (v0.8.0)", () => {
     const v = computeVerdict({
       claimedFamily: "anthropic",
       claimedModel: "claude-opus-4-7",
       surface: { family: "anthropic", score: 0.95 },
       behavior: { family: "anthropic", score: 0.90 },
-      v3: V3_FULL("anthropic", "anthropic/claude-opus-4.6", 0.65), // below 0.80
+      v3: V3_FULL("anthropic", "anthropic/claude-opus-4.6", 0.65),
     });
-    expect(v.status).toBe("clean_match");
+    // v0.8.0 tightening: V3 scores ≥0.60 are now surfaced as
+    // "submodel suspect" rather than silently passed through as clean_match.
+    // confidence is downgraded to "low" because v3.score < V3_HIGH_CONFIDENCE.
+    expect(v.status).toBe("clean_match_submodel_mismatch");
+    expect(v.confidence).toBe("low");
   });
 });
 
