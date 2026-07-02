@@ -531,6 +531,58 @@ sampleV3HDistributionFingerprint(callModel, BIAS_PROBES, candidates)
 
 ---
 
+## 判別流程圖（v0.9.0 完整 pipeline）
+
+```mermaid
+flowchart TD
+    A["探針套件<br/>品質 / 安全 / 完整 / 身份 + 子模型 + border"] --> FAM["家族證據"]
+
+    FAM --> V2["V2 行為家族分類"]
+    FAM --> ZH["中文自我認同<br/>hardOverride"]
+    FAM --> VFI["V3 家族傾向<br/>corroboration"]
+    V2 --> FF["fuseFamily()<br/>→ confirmedFamily<br/>(宣稱模型僅診斷,不能污染範圍)"]
+    ZH --> FF
+    VFI --> FF
+
+    FF -->|"scope 到 confirmedFamily"| POOL["子模型評分池"]
+    POOL --> V3S["V3 Scoped"]
+    POOL --> V3G["V3 Global"]
+    POOL --> V3E["V3E 拒答梯度/格式/不確定"]
+    POOL --> V3F["V3F 數值仲裁"]
+    POOL --> IKP["IKP 事實一致性"]
+
+    V3S --> V4["fuseToV4()<br/>優先級融合"]
+    V3G --> V4
+    V3E --> V4
+    V3F --> V4
+    IKP --> V4
+    ER["原生空拒答簽章<br/>(Claude 5)"] --> V4
+
+    V4 --> VETO{"行為家族否決?<br/>FAMILY_VETO"}
+    VETO -->|"矛盾"| DEMOTE["降級到家族內最佳候選<br/>(排除 disabled)"]
+    VETO -->|"一致"| TOP["V4 top 判定"]
+    DEMOTE --> TOP
+
+    FF --> H5["H5 filterFreshBiasBaselines<br/>過期/樣本不足 → fail-closed"]
+    H5 --> CAND{"同家族候選 ≥2<br/>且 家族信心 ≥0.6?"}
+    CAND -->|"否"| SKIP["V3H 跳過"]
+    CAND -->|"是"| SAMPLE["border 探針 temp=1 多次取樣<br/>Laplace log-likelihood → softmax"]
+    SAMPLE --> GATE{"H4 擬合下限<br/>+ conf/gap/vote gate?"}
+    GATE -->|"不過"| ABS["V3H abstain (安全)"]
+    GATE -->|"過"| PROMO["shouldPromoteSubModelFromV3H<br/>僅同家族 sibling,永不推翻與宣稱相符者"]
+    PROMO --> TOP
+
+    TOP --> VERDICT["identity-verdict<br/>clean_match / clean_match_submodel_mismatch /<br/>spoof_* / plain_mismatch / abstain"]
+```
+
+**讀圖重點**
+
+- **家族先確定,再談子模型**:`fuseFamily()` 產出 `confirmedFamily` 作為**唯一**家族來源;宣稱模型只是診斷,不能把候選範圍縮到它宣稱的家族(這堵住 claim-scoped 假接受)。
+- **兩條並行的子模型訊號**:左路 V3/V3E/V3F/IKP → `fuseToV4`(單樣本行為指紋);右路 V3H border-probe(多樣本分佈指紋),兩者都被**行為家族否決**與**同家族不越界**約束。
+- **安全優先**:H4 擬合下限 + H5 新鮮度讓「對不上任何候選」或「baseline 過期」時**寧可 abstain**,不亂判 → 對誠實提供商 0 假指控。
+
+---
+
 ## 自訂探針
 
 如需新增多語言關鍵字、將探針標記為 neutral、或新增全新探針，請參考逐步說明：

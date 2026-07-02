@@ -386,6 +386,58 @@ Sub-Model probes collect checkpoint-intrinsic behavioural signals for the sub-mo
 
 ---
 
+## Detection Pipeline (v0.9.0 full flow)
+
+```mermaid
+flowchart TD
+    A["Probe suite<br/>quality / security / integrity / identity + sub-model + border"] --> FAM["Family evidence"]
+
+    FAM --> V2["V2 behavioural family"]
+    FAM --> ZH["Chinese self-ID<br/>hardOverride"]
+    FAM --> VFI["V3 family-implied<br/>corroboration"]
+    V2 --> FF["fuseFamily()<br/>→ confirmedFamily<br/>(claimed model is diagnostic-only,<br/>can never scope candidates)"]
+    ZH --> FF
+    VFI --> FF
+
+    FF -->|"scope to confirmedFamily"| POOL["sub-model scoring pool"]
+    POOL --> V3S["V3 Scoped"]
+    POOL --> V3G["V3 Global"]
+    POOL --> V3E["V3E refusal-ladder / format / uncertainty"]
+    POOL --> V3F["V3F numeric tiebreak"]
+    POOL --> IKP["IKP factual consistency"]
+
+    V3S --> V4["fuseToV4()<br/>priority fusion"]
+    V3G --> V4
+    V3E --> V4
+    V3F --> V4
+    IKP --> V4
+    ER["native empty-refusal signature<br/>(Claude 5)"] --> V4
+
+    V4 --> VETO{"behavioural family veto?<br/>FAMILY_VETO"}
+    VETO -->|"contradicts"| DEMOTE["demote to best in-family candidate<br/>(disabled excluded)"]
+    VETO -->|"agrees"| TOP["V4 top verdict"]
+    DEMOTE --> TOP
+
+    FF --> H5["H5 filterFreshBiasBaselines<br/>stale/thin → fail-closed"]
+    H5 --> CAND{"same-family candidates ≥2<br/>and family confidence ≥0.6?"}
+    CAND -->|"no"| SKIP["V3H skipped"]
+    CAND -->|"yes"| SAMPLE["border probes @ temp=1, N samples<br/>Laplace log-likelihood → softmax"]
+    SAMPLE --> GATE{"H4 fit floor<br/>+ conf/gap/vote gate?"}
+    GATE -->|"fail"| ABS["V3H abstain (safe)"]
+    GATE -->|"pass"| PROMO["shouldPromoteSubModelFromV3H<br/>same-family sibling only,<br/>never overturns a claim-matching pick"]
+    PROMO --> TOP
+
+    TOP --> VERDICT["identity-verdict<br/>clean_match / clean_match_submodel_mismatch /<br/>spoof_* / plain_mismatch / abstain"]
+```
+
+**How to read it**
+
+- **Family first, sub-model second:** `fuseFamily()` produces `confirmedFamily` as the *single* family source; the claimed model is diagnostic-only and cannot narrow candidates to its claimed family (this closes the claim-scoped false-accept).
+- **Two parallel sub-model signals:** the left path (V3/V3E/V3F/IKP → `fuseToV4`, single-sample behavioural fingerprint) and the right path (V3H border-probe, multi-sample distribution fingerprint), both constrained by the **behavioural family veto** and a **never-cross-family** rule.
+- **Safety first:** the H4 fit floor + H5 freshness make the system **abstain** when nothing fits or a baseline is stale — 0 false accusations against honest providers.
+
+---
+
 ## Customising Probes
 
 To add multilingual keywords, mark probes as neutral, or create new probes, see:

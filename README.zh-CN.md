@@ -386,6 +386,58 @@ Sub-Model 探针收集每个 checkpoint 的固有行为特征，供子模型分�
 
 ---
 
+## 判别流程图（v0.9.0 完整 pipeline）
+
+```mermaid
+flowchart TD
+    A["探针套件<br/>质量 / 安全 / 完整 / 身份 + 子模型 + border"] --> FAM["家族证据"]
+
+    FAM --> V2["V2 行为家族分类"]
+    FAM --> ZH["中文自我认同<br/>hardOverride"]
+    FAM --> VFI["V3 家族倾向<br/>corroboration"]
+    V2 --> FF["fuseFamily()<br/>→ confirmedFamily<br/>(宣称模型仅诊断,不能污染范围)"]
+    ZH --> FF
+    VFI --> FF
+
+    FF -->|"scope 到 confirmedFamily"| POOL["子模型评分池"]
+    POOL --> V3S["V3 Scoped"]
+    POOL --> V3G["V3 Global"]
+    POOL --> V3E["V3E 拒答梯度/格式/不确定"]
+    POOL --> V3F["V3F 数值仲裁"]
+    POOL --> IKP["IKP 事实一致性"]
+
+    V3S --> V4["fuseToV4()<br/>优先级融合"]
+    V3G --> V4
+    V3E --> V4
+    V3F --> V4
+    IKP --> V4
+    ER["原生空拒答签章<br/>(Claude 5)"] --> V4
+
+    V4 --> VETO{"行为家族否决?<br/>FAMILY_VETO"}
+    VETO -->|"矛盾"| DEMOTE["降级到家族内最佳候选<br/>(排除 disabled)"]
+    VETO -->|"一致"| TOP["V4 top 判定"]
+    DEMOTE --> TOP
+
+    FF --> H5["H5 filterFreshBiasBaselines<br/>过期/样本不足 → fail-closed"]
+    H5 --> CAND{"同家族候选 ≥2<br/>且 家族信心 ≥0.6?"}
+    CAND -->|"否"| SKIP["V3H 跳过"]
+    CAND -->|"是"| SAMPLE["border 探针 temp=1 多次取样<br/>Laplace log-likelihood → softmax"]
+    SAMPLE --> GATE{"H4 拟合下限<br/>+ conf/gap/vote gate?"}
+    GATE -->|"不过"| ABS["V3H abstain (安全)"]
+    GATE -->|"过"| PROMO["shouldPromoteSubModelFromV3H<br/>仅同家族 sibling,永不推翻与宣称相符者"]
+    PROMO --> TOP
+
+    TOP --> VERDICT["identity-verdict<br/>clean_match / clean_match_submodel_mismatch /<br/>spoof_* / plain_mismatch / abstain"]
+```
+
+**读图重点**
+
+- **家族先确定,再谈子模型**:`fuseFamily()` 产出 `confirmedFamily` 作为**唯一**家族来源;宣称模型只是诊断,不能把候选范围缩到它宣称的家族(堵住 claim-scoped 假接受)。
+- **两条并行的子模型信号**:左路 V3/V3E/V3F/IKP → `fuseToV4`(单样本行为指纹);右路 V3H border-probe(多样本分布指纹),两者都被**行为家族否决**与**同家族不越界**约束。
+- **安全优先**:H4 拟合下限 + H5 新鲜度让「对不上任何候选」或「baseline 过期」时**宁可 abstain**,不乱判 → 对诚实提供商 0 假指控。
+
+---
+
 ## 自定义探针
 
 如需新增多语言关键字、将探针标记为 neutral、或新增全新探针，请参考逐步说明：
