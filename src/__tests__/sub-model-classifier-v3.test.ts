@@ -96,8 +96,18 @@ describe("V3_BASELINES integrity", () => {
       expect(b.modelId).toMatch(/\//);
       expect(b.family).toBeTruthy();
       expect(b.displayName).toBeTruthy();
-      expect(b.cutoff).toMatch(/^\d{4}-\d{2}$/);
-      expect(b.refusal.length_avg).toBeGreaterThan(0);
+      // Cutoff is either a YYYY-MM stamp or the literal "unknown" for models
+      // that decline to state a training cutoff (e.g. opus-4.8) — the classifier
+      // treats "unknown" as a non-matching cutoff feature, so it is a valid value.
+      expect(b.cutoff === "unknown" || /^\d{4}-\d{2}$/.test(b.cutoff)).toBe(true);
+      // nativeEmptyRefusal models (Claude 5 / Mythos, e.g. fable-5) produce a
+      // structurally EMPTY refusal body, so length_avg is legitimately 0 for
+      // them. Every other baseline still has a non-empty refusal.
+      if (b.nativeEmptyRefusal) {
+        expect(b.refusal.length_avg).toBeGreaterThanOrEqual(0);
+      } else {
+        expect(b.refusal.length_avg).toBeGreaterThan(0);
+      }
     }
   });
 

@@ -77,8 +77,19 @@ const sub_model_classifier_v3_js_1 = require("../sub-model-classifier-v3.js");
             (0, vitest_1.expect)(b.modelId).toMatch(/\//);
             (0, vitest_1.expect)(b.family).toBeTruthy();
             (0, vitest_1.expect)(b.displayName).toBeTruthy();
-            (0, vitest_1.expect)(b.cutoff).toMatch(/^\d{4}-\d{2}$/);
-            (0, vitest_1.expect)(b.refusal.length_avg).toBeGreaterThan(0);
+            // Cutoff is either a YYYY-MM stamp or the literal "unknown" for models
+            // that decline to state a training cutoff (e.g. opus-4.8) — the classifier
+            // treats "unknown" as a non-matching cutoff feature, so it is a valid value.
+            (0, vitest_1.expect)(b.cutoff === "unknown" || /^\d{4}-\d{2}$/.test(b.cutoff)).toBe(true);
+            // nativeEmptyRefusal models (Claude 5 / Mythos, e.g. fable-5) produce a
+            // structurally EMPTY refusal body, so length_avg is legitimately 0 for
+            // them. Every other baseline still has a non-empty refusal.
+            if (b.nativeEmptyRefusal) {
+                (0, vitest_1.expect)(b.refusal.length_avg).toBeGreaterThanOrEqual(0);
+            }
+            else {
+                (0, vitest_1.expect)(b.refusal.length_avg).toBeGreaterThan(0);
+            }
         }
     });
     (0, vitest_1.it)("no pairwise collisions within a family", () => {

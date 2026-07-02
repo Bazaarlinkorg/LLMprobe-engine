@@ -77,7 +77,7 @@ const program = new commander_1.Command();
 program
     .name("bazaarlink-probe")
     .description("Run OpenAI-compatible API quality & integrity probes")
-    .version("0.8.0");
+    .version("0.9.0");
 program
     .command("run")
     .description("Run the full probe suite against an endpoint")

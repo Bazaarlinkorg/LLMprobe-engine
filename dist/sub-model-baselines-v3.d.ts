@@ -31,11 +31,15 @@ export interface SubmodelBaselineV3 {
         /** approximate character count of full refusal response */
         length_avg: number;
     };
-    sourceIteration: "iter2" | "iter3" | "iter4" | "iter5" | "iter6";
+    /** Free-form provenance tag for the sampling run that produced this baseline.
+     *  Open-ended (e.g. "iter2".."iter8", "iter-sonnet5-2026-07-02") — generated data. */
+    sourceIteration: string;
     /** true = model rejects the temperature parameter (HTTP 400).
      *  Sourced from OpenRouter supported_parameters metadata — cannot be observed
      *  via OR (OR silently strips unsupported params). Must be hardcoded. */
     rejectsTemperature: boolean;
+    /** Claude 5 structured empty-refusal signature (empty body + finish_reason=refusal). */
+    nativeEmptyRefusal?: boolean;
 }
 export declare const V3_BASELINES: SubmodelBaselineV3[];
 export declare function getBaselinesForFamily(family: string): SubmodelBaselineV3[];

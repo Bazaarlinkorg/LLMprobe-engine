@@ -153,12 +153,73 @@ export {
   V3F_TIEBREAKER_THRESHOLD,
   V3F_TIEBREAKER_GAP_MAX,
 } from "./sub-model-classifier-v4.js";
+export {
+  FAMILY_VETO_CONFIDENCE,
+} from "./sub-model-classifier-v4.js";
 export type {
   V4Match,
   V4Output,
   V4FuseSource,
   V3LikeAdapter,
+  EmptyRefusalSignal,
+  FamilySignal,
 } from "./sub-model-classifier-v4.js";
+
+// ── V3G/V3H border-probe bias-fingerprint layer ──────────────────────────
+export {
+  BIAS_PROBES,
+  normalizeBiasAnswer,
+} from "./sub-model-bias-probes.js";
+export type { BiasProbe } from "./sub-model-bias-probes.js";
+
+export {
+  scoreBiasFingerprint,
+  scoreV3HDistributionFingerprint,
+  shouldPromoteSubModelFromV3H,
+  shouldFillSubModelFromV3G,
+  filterFreshBiasBaselines,
+  V3H_ACTIVE_PROMPT_POLICIES,
+  policyForCandidates,
+  selectBiasProbesForCandidates,
+  candidateSiblingsFor,
+  candidateSiblingsForFamily,
+  candidateSiblingsForConfirmedFamily,
+  biasDisplayName,
+  sampleBiasFingerprint,
+  sampleV3HDistributionFingerprint,
+} from "./sub-model-v3g-bias-fingerprint.js";
+export type {
+  BiasBaseline,
+  BaselineFreshnessOpts,
+  BiasObservation,
+  V3GResult,
+  V3HPolicy,
+  V3HResult,
+} from "./sub-model-v3g-bias-fingerprint.js";
+
+export { BIAS_BASELINES } from "./sub-model-bias-baselines.js";
+
+// ── Detection registry (reversible disable list) ─────────────────────────
+export {
+  DETECTION_DISABLED_MODEL_IDS,
+  isDetectionDisabled,
+  filterDetectable,
+} from "./sub-model-detection-config.js";
+
+// ── Native empty-refusal signal (Claude 5 / Mythos fingerprint) ──────────
+export { detectNativeEmptyRefusal } from "./sub-model-empty-refusal-signal.js";
+export type {
+  ProbeItemLite,
+  NativeEmptyRefusalSignal,
+} from "./sub-model-empty-refusal-signal.js";
+
+// ── Family fusion (V5 stage 1: confirmedFamily) ──────────────────────────
+export { fuseFamily } from "./identity-family-fusion.js";
+export type {
+  FamilyFusionInput,
+  FamilyFusionResult,
+  FamilyEvidenceSource,
+} from "./identity-family-fusion.js";
 
 export {
   classifySubmodelIKP,

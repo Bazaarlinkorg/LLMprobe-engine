@@ -5,6 +5,8 @@
 針對 OpenAI-compatible API 端點的開源 CLI 測試工具與 Node.js 函式庫。  
 執行品質、安全性、完整性、身份識別探針，產出 0–100 評分報告。
 
+> **v0.9.0** (2026-07-02)：新增 **層⑥ V3H border-probe 分佈指紋分類器**（bias-fingerprint）— 以短「隨機選擇」探針（隨機國家 / 1–100 / 動物 / 顏色 / 字母 / 星期 / 0 是否為自然數）的**答案分佈**分辨 V3/V3E/V3F 特徵重疊、無法分開的**同家族兄弟模型**：`gpt-5.5 ↔ gpt-5.3-codex`、`deepseek-v4-flash ↔ pro`、以及 **9 模型 Claude 叢集**（opus-4.5/4.6/4.7/4.8、sonnet-4.5/4.6/5、haiku-4.5、fable-5），離線交叉誤判 **0%**、叢集外冒充自動 abstain。同時新增 **V5 Family Fusion**（`confirmedFamily` 單一家族來源，宣稱模型不能污染候選範圍，堵住 claim-scoped 假接受）、**H4 絕對擬合下限 + H5 baseline 新鮮度閘**、**原生空拒答簽章**（Claude 5 結構化空拒答指紋）與 **行為家族否決**（family veto）。離線 baseline 擴充至 **33 個模型**（新增 deepseek-v4-flash/pro、glm-5/5.1/5.2、claude-opus-4.7/4.8、claude-sonnet-5、claude-fable-5、gpt-5.4/5.5/5.3-codex、gemini-3.1）。32 個測試檔 / 314 個測試。
+>
 > **v0.8.0** (2026-05-24)：新增 **層⑤ V4 集成融合分類器**（V3 Scoped + V3 Global + IKP 四階優先級融合），新增 **IKP（Inherent Knowledge Probe）5 個事實探針**用於兄弟模型一致性驗證，新增 **Bayesian 子模型評分**與 **identity-v2 家族分類器**，新增 **LLMmap 風格基準匹配投票**（`baseline-match-votes`）。28 個測試檔 / 298 個測試。V4 攻擊準確度方法論見 [`docs/reports/2026-05-10-v4-attack-accuracy.md`](docs/reports/2026-05-10-v4-attack-accuracy.md)。
 >
 > **v0.7.0** (2026-04-26)：新增方法層 **層④（V3E / V3F）行為向量擴展分類器** — 拒絕梯度（8 探針）、格式偏好（3 探針）、數值不確定性（1 探針）共 12 個新 V3E 探針；附帶 22 個熱門模型的離線 baseline 快照（Anthropic / OpenAI / Google / DeepSeek 旗艦線）。完整方法論與實證測量見論文 [`docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md)（中文版）/ [`.en.md`](docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.en.md)（英文版）。
@@ -476,6 +478,59 @@ v0.9.0 規劃中。
 
 ---
 
+## 層⑥ V3H border-probe 分佈指紋（v0.9.0）
+
+V3/V3E/V3F 是**單樣本行為指紋**。對特徵高度重疊的同家族兄弟（例如 `gpt-5.5` vs
+`gpt-5.3-codex`,或整個 Claude 叢集)它們**分不開**——cutoff、能力答案、拒答句幾乎一致。
+
+V3H 換一個訊號:**內在偏好分佈**。對一支短的「隨機選擇」探針(例如「說一個隨機動物,
+只回一個字」)重複取樣 N 次,一個模型的答案**分佈**是它 fine-tune 的指紋,而非任何單一答案。
+微調差異越大,分佈分離越乾淨(codex 因為重度 code fine-tune,非程式「創意」偏好與 gpt-5.5
+天差地遠)。
+
+```
+sampleV3HDistributionFingerprint(callModel, BIAS_PROBES, candidates)
+  → 對每支 border 探針取樣 → 每個候選算 Laplace 平滑 log-likelihood
+  → softmax 後驗 → 通過 gate 才判定,否則 abstain
+```
+
+**gate（每次 run）**:`minConfidence`、`minLogLikelihoodGap`、`minProbeVoteMargin`,
+外加 **H4 絕對擬合下限** `minAvgLogLikelihood`(勝出候選的每答案平均 log-likelihood
+必須夠高,否則 abstain)——這擋掉「兩個候選都對不上」的叢集外冒充(答案全未見時平均
+≈ `log(1/(n+60)) ≈ -4.6`,低於下限直接 abstain)。**H5** `filterFreshBiasBaselines`
+以 `capturedAt`/`sampleCount` fail-closed 擋掉過期/樣本不足的 baseline。
+
+**已驗證的 V3H policy**（`V3H_ACTIVE_PROMPT_POLICIES`）：
+
+| policy | 模型 | 離線準確度 |
+|---|---|---|
+| `deepseek-v4-flash-pro` | flash / pro | ~90% |
+| `openai-gpt55-codex53` | gpt-5.5 / gpt-5.3-codex | 98.8%,交叉誤判 0% |
+| `anthropic-claude-cluster` | 9 模型 Claude 叢集 | 95.5%,交叉誤判 0%,叢集外 abstain |
+
+`shouldPromoteSubModelFromV3H` 只在有**已驗證 policy** 且所有 gate 通過時才把 V3H 的
+判定升進最終裁決,且**永不跨越 `confirmedFamily`**、**永不推翻與宣稱相符的判定**
+(避免對誠實提供商製造假的「已替換」指控)。
+
+## V5 Family Fusion + 空拒答 + 家族否決（v0.9.0）
+
+- **`fuseFamily()`**(`identity-family-fusion`):把所有家族證據(V2 行為分類、中文自我認同、
+  V3 家族傾向)融成單一 `confirmedFamily`,作為**所有子模型評分的唯一家族來源**。宣稱模型
+  **只是診斷用,永遠不能**成為 `confirmedFamily`——這堵住了「用宣稱模型污染家族範圍」的
+  claim-scoped 假接受。
+- **原生空拒答簽章**(`detectNativeEmptyRefusal`):Claude 5 家族對拒答探針回**結構化空 body**
+  (`finish_reason=refusal` + 空內容),是獨特指紋。
+- **行為家族否決**(`fuseToV4` 的 `FAMILY_VETO_CONFIDENCE`):行為家族分類器高信心指向 X 家族時,
+  否決任何跨到別家族的子模型判定,降級到該家族內最佳候選或 abstain。
+- **`detection-config`**:`DETECTION_DISABLED_MODEL_IDS` 可逆登記表(目前為空),讓暫停/不可
+  服務的模型不被當作偵測候選。
+
+**注意**:V3/V3E/V3F/IKP/V3H 都從 public API 暴露讓使用者自行組合;`runProbes` runner 尚未
+自動執行完整 pipeline(border 探針需 temperature=1 多次取樣)。完整 pipeline 自動 wiring 為
+後續規劃。
+
+---
+
 ## 自訂探針
 
 如需新增多語言關鍵字、將探針標記為 neutral、或新增全新探針，請參考逐步說明：
@@ -878,7 +933,7 @@ npm run build   # 編譯 TypeScript → dist/
 ### 執行測試
 
 ```bash
-npm test                        # 執行全部 298 個測試（約 1 秒）
+npm test                        # 執行全部 314 個測試（約 1 秒）
 npm test -- --reporter=verbose  # 顯示每個測試的名稱與耗時
 npm test -- --watch             # 監聽模式，存檔自動重跑
 ```

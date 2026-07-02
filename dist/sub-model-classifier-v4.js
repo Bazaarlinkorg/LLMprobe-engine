@@ -21,14 +21,25 @@
 // Validated against tmp/v3e-backtest 36 spoof runs + claim=gpt-5.5 simulation.
 // See docs/reports/2026-05-10-v4-attack-accuracy.md.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.V3F_TIEBREAKER_GAP_MAX = exports.V3F_TIEBREAKER_THRESHOLD = exports.V4_GLOBAL_CONFIDENCE_THRESHOLD = void 0;
+exports.FAMILY_VETO_CONFIDENCE = exports.V3F_TIEBREAKER_GAP_MAX = exports.V3F_TIEBREAKER_THRESHOLD = exports.V4_GLOBAL_CONFIDENCE_THRESHOLD = void 0;
 exports.fuseToV4 = fuseToV4;
+const sub_model_detection_config_js_1 = require("./sub-model-detection-config.js");
+/** Intentionally LOWER than V3's own 0.60 gate (classifier-v3.ts confidenceThreshold):
+ *  V4 only reaches this check after family corroboration from multiple signals
+ *  (fuse rules 1-4), so a 0.55 sub-model score is safer here than a raw V3 0.55.
+ *  Do NOT unify to 0.60 without re-running the v3e-backtest 36-spoof suite —
+ *  see docs/reports/2026-05-10-v4-attack-accuracy.md. */
 exports.V4_GLOBAL_CONFIDENCE_THRESHOLD = 0.55;
 exports.V3F_TIEBREAKER_THRESHOLD = 0.70;
 exports.V3F_TIEBREAKER_GAP_MAX = 0.05;
 /** Models whose V3 fingerprint overlaps so completely that V3F's isRoundRate
  *  signal is the only reliable discriminator. See v3f-consolidated-report §2.2. */
 const V3F_AMBIGUOUS_PAIR = new Set(["openai/gpt-5.5", "openai/gpt-5.3-codex"]);
+/** Min family-classifier confidence to veto a contradicting empty-refusal pick.
+ *  0.6: a non-anthropic TOP family at ≥0.6 is a clear "not Claude" signal, since
+ *  genuine Fable always has anthropic as its top family (so it never contradicts
+ *  at any threshold). Catches borderline cross-family relays (glm/google 0.67). */
+exports.FAMILY_VETO_CONFIDENCE = 0.6;
 /**
  * Fuse V3 Scoped, V3 Global, IKP, and V3F into a single V4C verdict.
  * `claimedFamily` is informational only — V4 does not gate on it.
@@ -61,7 +72,7 @@ function applyV3FTiebreaker(picked, v3f) {
     // score than #1" visual the user reported on 2026-05-13.
     return { overridden: true, top: v3f, candidates: [v3f] };
 }
-function fuseToV4(v3Scoped, v3Global, ikp, _claimedFamily, v3f) {
+function fuseToV4(v3Scoped, v3Global, ikp, _claimedFamily, v3f, emptyRefusal, v3eTop, behavioralFamily) {
     const scopedTop = v3Scoped?.subModelMatch ?? null;
     const scopedAbstain = !!(v3Scoped?.abstained || !scopedTop);
     const globalTop = v3Global?.subModelMatch ?? null;
@@ -79,11 +90,61 @@ function fuseToV4(v3Scoped, v3Global, ikp, _claimedFamily, v3f) {
             return out;
         return { ...out, subModelMatch: tb.top, candidates: tb.candidates, fuseSource: "v3f" };
     }
+    // Helper for V3-Global-sourced picks: tiebreaker + FAMILY CONSISTENCY guard.
+    //
+    // The behavioural family classifier is the reliable signal. Whenever the fused
+    // sub-model pick CONTRADICTS a confident behavioural family, it is V3-Global
+    // noise — e.g. a foreign gpt-5.5 that blanks the refusal probe gets scored
+    // claude-fable-5 (anthropic) while family=openai 98% (runId cmqch9zci0…), or a
+    // blank-heavy anthropic-98% endpoint gets a stray google/gemini global pick.
+    // In both cases, drop to the best candidate WITHIN the behavioural family
+    // (also excluding suspended/disabled detection targets); abstain (family-only)
+    // if none. Never assert a sub-model from a family the classifier rejects.
+    function finalize(out) {
+        const t = withTiebreaker(out);
+        if (!t.subModelMatch)
+            return t;
+        const familyContradicts = !!behavioralFamily &&
+            behavioralFamily.confidence >= exports.FAMILY_VETO_CONFIDENCE &&
+            behavioralFamily.family !== t.subModelMatch.family;
+        if (!familyContradicts)
+            return t;
+        const fam = behavioralFamily?.family;
+        const excluded = (id) => (0, sub_model_detection_config_js_1.isDetectionDisabled)(id) || !!emptyRefusal?.isEmptyRefusalModel(id);
+        const candidates = [];
+        if (v3eTop && !excluded(v3eTop.modelId))
+            candidates.push({ m: v3eTop, src: "v3e" });
+        if (v3f && !excluded(v3f.modelId))
+            candidates.push({ m: v3f, src: "v3f" });
+        for (const c of t.candidates)
+            if (!excluded(c.modelId))
+                candidates.push({ m: c, src: "v3-global" });
+        // Stay within the confident behavioural family — never cross on global noise.
+        const pool = fam ? candidates.filter((p) => p.m.family === fam) : candidates;
+        const choose = pool.sort((a, b) => b.m.score - a.m.score)[0];
+        if (choose) {
+            return {
+                subModelMatch: choose.m,
+                candidates: t.candidates.length ? t.candidates : [choose.m],
+                abstained: false,
+                fuseSource: choose.src,
+                crossFamilyDisagreement: true,
+            };
+        }
+        // No in-family / detectable candidate to fall back to — abstain (family-only).
+        return {
+            subModelMatch: null,
+            candidates: t.candidates,
+            abstained: true,
+            fuseSource: "abstain",
+            crossFamilyDisagreement: true,
+        };
+    }
     // Rule 1 & 2: V3 Scoped hit
     if (scopedTop && !scopedAbstain) {
         if (globalConfident && globalTop.family !== scopedTop.family) {
             // Rule 2: cross-family override
-            return withTiebreaker({
+            return finalize({
                 subModelMatch: globalTop,
                 candidates: v3Global?.candidates ?? [globalTop],
                 abstained: false,
@@ -100,9 +161,30 @@ function fuseToV4(v3Scoped, v3Global, ikp, _claimedFamily, v3f) {
             crossFamilyDisagreement,
         });
     }
+    // Rule 2.5: native empty-refusal corroboration (Claude 5 / Mythos).
+    // A structured empty refusal is unique to Claude 5. When the observation has
+    // one AND V3 Global's top candidate is a baseline flagged nativeEmptyRefusal,
+    // trust the feature classifier over a contradictory IKP-only pick (IKP's
+    // codegen probes are blind to refusal behaviour — runId cmq7mlmma…: 4router.net
+    // served fable-5 but IKP mislabelled it opus-4.8). Tightly gated:
+    //   • only reached when V3 Scoped abstained (confident scoped wins above), and
+    //   • only ever selects the flagged model, and only when V3 Global already
+    //     ranked it #1 — so it cannot promote a non-Claude-5 model.
+    if (emptyRefusal?.confirmed) {
+        const gTop = globalTop ?? v3Global?.candidates?.[0] ?? null;
+        if (gTop && emptyRefusal.isEmptyRefusalModel(gTop.modelId)) {
+            return finalize({
+                subModelMatch: gTop,
+                candidates: v3Global?.candidates ?? [gTop],
+                abstained: false,
+                fuseSource: "v3-global",
+                crossFamilyDisagreement: !!(scopedTop && gTop.family !== scopedTop.family),
+            });
+        }
+    }
     // Rule 3: V3 Scoped abstain + V3 Global confident hit
     if (globalConfident) {
-        return withTiebreaker({
+        return finalize({
             subModelMatch: globalTop,
             candidates: v3Global?.candidates ?? [globalTop],
             abstained: false,
@@ -126,7 +208,7 @@ function fuseToV4(v3Scoped, v3Global, ikp, _claimedFamily, v3f) {
             ((familyAgreeWith && familyAgreeWith(gTop)) ||
                 (!familyImplied && gTop2 && gTop.family === gTop2.family && gTop2.score >= 0.65));
         if (familyConfident) {
-            return withTiebreaker({
+            return finalize({
                 subModelMatch: gTop,
                 candidates: v3Global.candidates,
                 abstained: false,
@@ -158,8 +240,12 @@ function fuseToV4(v3Scoped, v3Global, ikp, _claimedFamily, v3f) {
         };
     }
     // Rule 4: V3 Scoped abstain + V3 Global abstain/low-conf + IKP hit (same family or no familyImplied)
+    // Routed through finalize() so a confident behavioural family vetoes a cross-family IKP
+    // pick — IKP's 5 obscure-fact probes are blind to family, so on a deepseek endpoint the
+    // Chinese-axis override (deepseek 0.99) must override an anthropic IKP guess rather than
+    // letting it surface as a false "已替換" sub-model (dev runId cmr1w7ts…).
     if (ikpTop) {
-        return {
+        return finalize({
             subModelMatch: {
                 modelId: ikpTop.modelId,
                 displayName: ikpTop.displayName,
@@ -175,7 +261,7 @@ function fuseToV4(v3Scoped, v3Global, ikp, _claimedFamily, v3f) {
             abstained: false,
             fuseSource: "ikp",
             crossFamilyDisagreement: false,
-        };
+        });
     }
     // Rule 5: all abstain
     return {
