@@ -1,4 +1,4 @@
-// src/sub-model-classifier-v4.ts — V4 ensemble fuse.
+// lib/sub-model/classifier-v4.ts — V4 ensemble fuse.
 //
 // V4 = V3 Scoped + V3 Global + IKP, fused via 4-tier priority (D''').
 // Replaces the V3F UI panel position (V3F still computed but no longer the
@@ -20,8 +20,8 @@
 // Validated against tmp/v3e-backtest 36 spoof runs + claim=gpt-5.5 simulation.
 // See docs/reports/2026-05-10-v4-attack-accuracy.md.
 
-import type { IkpOutput } from "./sub-model-classifier-ikp.js";
-import { isDetectionDisabled } from "./sub-model-detection-config.js";
+import type { IkpOutput } from "./sub-model-classifier-ikp";
+import { isDetectionDisabled } from "./sub-model-detection-config";
 
 /** Intentionally LOWER than V3's own 0.60 gate (classifier-v3.ts confidenceThreshold):
  *  V4 only reaches this check after family corroboration from multiple signals
@@ -140,6 +140,23 @@ export function fuseToV4(
 
   const crossFamilyDisagreement = !!(scopedTop && globalTop && scopedTop.family !== globalTop.family);
 
+  // Abstain-path guard: when the fuse abstains but a confident behavioural
+  // family exists, strip any cross-family V3-Global noise from `candidates` so
+  // display surfaces never surface e.g. a stray glm/gemini as the "detected
+  // family / sub-model". Confident picks are already family-consistent, so this
+  // only touches abstained outputs. May leave `candidates` empty — that is
+  // correct (family-only verdict).
+  function scopeAbstainCandidates(out: V4Output): V4Output {
+    if (!out.abstained) return out;
+    const fam =
+      behavioralFamily && behavioralFamily.confidence >= FAMILY_VETO_CONFIDENCE
+        ? behavioralFamily.family
+        : null;
+    if (!fam) return out;
+    const scoped = out.candidates.filter((c) => c.family === fam);
+    return { ...out, candidates: scoped };
+  }
+
   // Helper: wrap any verdict with V3F tiebreaker (rule 1.5).
   // Only fires for openai gpt-5.5 ↔ gpt-5.3-codex feature-overlap pair.
   function withTiebreaker(out: V4Output): V4Output {
@@ -193,13 +210,13 @@ export function fuseToV4(
       };
     }
     // No in-family / detectable candidate to fall back to — abstain (family-only).
-    return {
+    return scopeAbstainCandidates({
       subModelMatch: null,
       candidates: t.candidates,
       abstained: true,
       fuseSource: "abstain",
       crossFamilyDisagreement: true,
-    };
+    });
   }
 
   // Rule 1 & 2: V3 Scoped hit
@@ -300,13 +317,13 @@ export function fuseToV4(
         crossFamilyDisagreement: false,
       };
     }
-    return {
+    return scopeAbstainCandidates({
       subModelMatch: null,
       candidates: v3Global?.candidates ?? [],
       abstained: true,
       fuseSource: "abstain",
       crossFamilyDisagreement: true,
-    };
+    });
   }
 
   // Rule 4: V3 Scoped abstain + V3 Global abstain/low-conf + IKP hit (same family or no familyImplied)
@@ -335,11 +352,11 @@ export function fuseToV4(
   }
 
   // Rule 5: all abstain
-  return {
+  return scopeAbstainCandidates({
     subModelMatch: null,
     candidates: [],
     abstained: true,
     fuseSource: "abstain",
     crossFamilyDisagreement: false,
-  };
+  });
 }

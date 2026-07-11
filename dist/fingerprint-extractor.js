@@ -1,10 +1,10 @@
 "use strict";
-// src/fingerprint-extractor.ts — Rule-based behavioral feature extractor
+// lib/fingerprint-extractor.ts — Rule-based behavioral feature extractor
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.extractFingerprint = extractFingerprint;
-const linguistic_fingerprint_js_1 = require("./linguistic-fingerprint.js");
-const performance_fingerprint_js_1 = require("./performance-fingerprint.js");
-const fingerprint_features_v2_js_1 = require("./fingerprint-features-v2.js");
+const linguistic_fingerprint_1 = require("./linguistic-fingerprint");
+const performance_fingerprint_1 = require("./performance-fingerprint");
+const fingerprint_features_v2_1 = require("./fingerprint-features-v2");
 /** Extract behavioral fingerprint features from probe response map. */
 function extractFingerprint(responses, linguisticResults = {}, items = [], // ← new optional param (default empty array)
 singleRunFallbacks = {}) {
@@ -19,11 +19,13 @@ singleRunFallbacks = {}) {
         llama: has(selfText, ["llama", "meta ai", "meta llama"]) ? 1 : 0,
         mistral: has(selfText, ["mistral"]) ? 1 : 0,
         deepseek: has(selfText, ["deepseek"]) ? 1 : 0,
+        grok: has(selfText, ["grok", "xai"]) ? 1 : 0,
         // Amazon Q Developer / Kiro: coding-agent wrapper injecting ~2000-token hidden system prompt
         kiro: has(selfText, ["kiro", "amazon q developer", "kiro-cli"]) ? 1 : 0,
         vague: selfText.length > 0 && !has(selfText, [
             "claude", "anthropic", "chatgpt", "gpt", "openai", "qwen", "通义",
             "gemini", "llama", "mistral", "deepseek", "kiro", "amazon q",
+            "grok", "xai",
         ]) ? 1 : 0,
     };
     // ── Lexical style signals ─────────────────────────────────────────────────
@@ -92,7 +94,7 @@ singleRunFallbacks = {}) {
     const allText = Object.values(responses).join(" ");
     const enWords = styleEn.split(/\s+/).filter(Boolean);
     const uniqueWords = new Set(enWords.map(w => w.toLowerCase()));
-    const perfFeatures = (0, performance_fingerprint_js_1.extractPerformanceFeatures)(items);
+    const perfFeatures = (0, performance_fingerprint_1.extractPerformanceFeatures)(items);
     const subModelSignals = {
         total_response_length: Math.min(1, allText.length / 15000),
         en_response_length: Math.min(1, styleEn.length / 3000),
@@ -111,7 +113,7 @@ singleRunFallbacks = {}) {
         // Performance signals from actual probe run timing
         ...perfFeatures,
     };
-    const linguisticFingerprint = (0, linguistic_fingerprint_js_1.extractLinguisticFeatures)(linguisticResults, singleRunFallbacks);
+    const linguisticFingerprint = (0, linguistic_fingerprint_1.extractLinguisticFeatures)(linguisticResults, singleRunFallbacks);
     // ── Text structure (v2 lexical mining) ────────────────────────────────────
     const allTexts = [];
     for (const v of Object.values(responses)) {
@@ -125,12 +127,12 @@ singleRunFallbacks = {}) {
         }
     }
     const textStructure = allTexts.length > 0
-        ? (0, fingerprint_features_v2_js_1.aggregateTextStructure)(allTexts.map(fingerprint_features_v2_js_1.extractTextStructureFeatures))
+        ? (0, fingerprint_features_v2_1.aggregateTextStructure)(allTexts.map(fingerprint_features_v2_1.extractTextStructureFeatures))
         : {};
     // Merge timing features into the existing subModelSignals category.
     // Keys from aggregateTimingFeatures (tps_bucket_*, ttft_bucket_*, out_len_*,
     // *_median_norm, tps_unstable) do not conflict with existing performance keys.
-    const timingFeatures = (0, fingerprint_features_v2_js_1.aggregateTimingFeatures)(items);
+    const timingFeatures = (0, fingerprint_features_v2_1.aggregateTimingFeatures)(items);
     Object.assign(subModelSignals, timingFeatures);
     return { selfClaim, lexical, reasoning, jsonDiscipline, refusal, listFormat, subModelSignals, linguisticFingerprint, textStructure };
 }

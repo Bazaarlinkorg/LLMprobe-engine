@@ -1,6 +1,6 @@
-// src/backtest-scorer.ts — Linguistic-fingerprint-only scoring and backtest utilities
+// lib/backtest-scorer.ts — Linguistic-fingerprint-only scoring and backtest utilities
 
-import { FAMILY_BASELINES } from "./fingerprint-baseline.js";
+import { FAMILY_BASELINES } from "./fingerprint-baseline";
 
 /**
  * Score a linguisticFingerprint feature map against family baselines.
@@ -23,6 +23,7 @@ export function scoreLinguisticOnly(
     rawScores.push({ family: baseline.family, raw });
   }
 
+  // Normalize: divide by max raw, clamp to [0, 1]
   const maxRaw = Math.max(...rawScores.map(s => s.raw), 1);
   const scores = rawScores.map(s => ({
     family: s.family,
@@ -75,6 +76,11 @@ export function modelIdToFamily(modelId: string): string {
   if (m.includes("mistral") || m.includes("mixtral") || m.includes("mistralai/")) return "mistral";
   if (m.includes("deepseek")) return "deepseek";
   if (m.includes("glm") || m.includes("zhipu") || m.includes("zhipuai/") || m.includes("z-ai")) return "zhipu";
+  // xAI (2026-07-10). Must come AFTER z-ai: "x-ai/..." contains no "z-ai", but keeping the
+  // two adjacent makes the near-collision obvious. Without this rule every grok id fell through
+  // to "unknown", which closes the V3H gate (`family !== "unknown"`) and left the sub-model
+  // layer blind to Grok while 14 grok routes were live.
+  if (m.includes("grok") || m.includes("x-ai/") || m.includes("xai/")) return "xai";
   return "unknown";
 }
 
@@ -86,8 +92,8 @@ export interface AccuracyStats {
   trueFamily: string;
   total: number;
   correct: number;
-  accuracy: number;
-  topPredictions: string[];
+  accuracy: number;          // 0–1
+  topPredictions: string[];  // top predicted family per record
 }
 
 /**

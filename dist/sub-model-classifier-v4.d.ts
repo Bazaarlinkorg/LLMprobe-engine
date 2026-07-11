@@ -1,4 +1,4 @@
-import type { IkpOutput } from "./sub-model-classifier-ikp.js";
+import type { IkpOutput } from "./sub-model-classifier-ikp";
 /** Intentionally LOWER than V3's own 0.60 gate (classifier-v3.ts confidenceThreshold):
  *  V4 only reaches this check after family corroboration from multiple signals
  *  (fuse rules 1-4), so a 0.55 sub-model score is safer here than a raw V3 0.55.

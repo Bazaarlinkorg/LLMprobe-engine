@@ -1,5 +1,5 @@
 "use strict";
-// src/fingerprint-baseline.ts — Rule-based model family signal weights
+// lib/fingerprint-baseline.ts — Rule-based model family signal weights
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FAMILY_BASELINES = void 0;
 exports.claimedModelToFamily = claimedModelToFamily;
@@ -13,6 +13,8 @@ exports.FAMILY_BASELINES = [
         family: "anthropic",
         displayName: "Anthropic / Claude",
         signals: [
+            ["linguisticFingerprint", "meta_creator_xai", -3.0], // "created by xAI" is never anthropic (attack-resistant column)
+            ["selfClaim", "grok", -4.0], // a Grok self-ID is never anthropic (xai family added 2026-07-10)
             ["selfClaim", "claude", 3.0],
             ["selfClaim", "kiro", 1.5], // Kiro runs on Claude; self-ID as Kiro suggests Anthropic base
             ["selfClaim", "deepseek", -4.0],
@@ -92,6 +94,8 @@ exports.FAMILY_BASELINES = [
         family: "openai",
         displayName: "OpenAI / GPT",
         signals: [
+            ["linguisticFingerprint", "meta_creator_xai", -3.0], // "created by xAI" is never openai (attack-resistant column)
+            ["selfClaim", "grok", -4.0], // a Grok self-ID is never openai (xai family added 2026-07-10)
             ["selfClaim", "openai", 4.0],
             ["selfClaim", "deepseek", -4.0],
             ["selfClaim", "qwen", -4.0],
@@ -159,6 +163,8 @@ exports.FAMILY_BASELINES = [
         family: "qwen",
         displayName: "Alibaba / Qwen",
         signals: [
+            ["linguisticFingerprint", "meta_creator_xai", -3.0], // "created by xAI" is never qwen (attack-resistant column)
+            ["selfClaim", "grok", -4.0], // a Grok self-ID is never qwen (xai family added 2026-07-10)
             ["selfClaim", "qwen", 3.0],
             ["refusal", "chinese_refusal", 2.0],
             ["lexical", "verbose_zh", 1.0],
@@ -172,6 +178,8 @@ exports.FAMILY_BASELINES = [
         family: "google",
         displayName: "Google / Gemini",
         signals: [
+            ["linguisticFingerprint", "meta_creator_xai", -3.0], // "created by xAI" is never google (attack-resistant column)
+            ["selfClaim", "grok", -4.0], // a Grok self-ID is never google (xai family added 2026-07-10)
             ["selfClaim", "gemini", 3.0],
             ["lexical", "uses_numbered_list", 1.0],
             ["reasoning", "uses_therefore", 0.5],
@@ -200,6 +208,8 @@ exports.FAMILY_BASELINES = [
         family: "meta",
         displayName: "Meta / Llama",
         signals: [
+            ["linguisticFingerprint", "meta_creator_xai", -3.0], // "created by xAI" is never meta (attack-resistant column)
+            ["selfClaim", "grok", -4.0], // a Grok self-ID is never meta (xai family added 2026-07-10)
             ["selfClaim", "llama", 3.0],
             ["jsonDiscipline", "markdown_polluted", 1.0],
             ["refusal", "no_refusal", 1.5],
@@ -211,6 +221,8 @@ exports.FAMILY_BASELINES = [
         family: "mistral",
         displayName: "Mistral AI",
         signals: [
+            ["linguisticFingerprint", "meta_creator_xai", -3.0], // "created by xAI" is never mistral (attack-resistant column)
+            ["selfClaim", "grok", -4.0], // a Grok self-ID is never mistral (xai family added 2026-07-10)
             ["selfClaim", "mistral", 3.0],
             ["lexical", "concise_en", 1.0],
             ["selfClaim", "claude", -3.0],
@@ -222,6 +234,8 @@ exports.FAMILY_BASELINES = [
         family: "deepseek",
         displayName: "DeepSeek",
         signals: [
+            ["linguisticFingerprint", "meta_creator_xai", -3.0], // "created by xAI" is never deepseek (attack-resistant column)
+            ["selfClaim", "grok", -4.0], // a Grok self-ID is never deepseek (xai family added 2026-07-10)
             ["selfClaim", "deepseek", 3.0],
             ["reasoning", "uses_chain_of_thought", 1.0],
             ["lexical", "uses_dash_bullets", 1.5], // DeepSeek also uses dash bullets
@@ -233,6 +247,8 @@ exports.FAMILY_BASELINES = [
         family: "zhipu",
         displayName: "Zhipu AI / GLM",
         signals: [
+            ["linguisticFingerprint", "meta_creator_xai", -3.0], // "created by xAI" is never zhipu (attack-resistant column)
+            ["selfClaim", "grok", -4.0], // a Grok self-ID is never zhipu (xai family added 2026-07-10)
             ["selfClaim", "vague", 1.5],
             ["selfClaim", "kiro", -4.0], // KIRO self-claim is never Zhipu
             ["linguisticFingerprint", "overall_instability", 1.2],
@@ -256,6 +272,33 @@ exports.FAMILY_BASELINES = [
             ["linguisticFingerprint", "de_chan_scholz", 1.0], // Zhipu knows Scholz (pre-2025 cutoff)
         ],
     },
+    {
+        // xAI / Grok (added 2026-07-10). Before this entry every grok id scored against the other
+        // eight baselines, and modelIdToFamily() returned "unknown" — which closes the V3H gate
+        // (`family !== "unknown"`) and left the sub-model layer blind while 14 grok routes sold.
+        // The self-claim carries the signal: both live models identify unprompted
+        // ("I am Grok, a curious AI built by xAI." / "I am Grok 4, an AI model built by xAI.").
+        // Behavioural weights are deliberately sparse — only signals we measured ship here, and the
+        // other families' negative selfClaim/grok weights do most of the discriminating work.
+        family: "xai",
+        displayName: "xAI / Grok",
+        signals: [
+            ["linguisticFingerprint", "meta_creator_xai", 3.0], // measured: both live Grok models answer "xAI"
+            ["linguisticFingerprint", "meta_creator_anthropic", -3.0],
+            ["linguisticFingerprint", "meta_creator_openai", -3.0],
+            ["linguisticFingerprint", "meta_creator_google", -3.0],
+            ["linguisticFingerprint", "meta_creator_zhipu", -3.0],
+            ["selfClaim", "grok", 3.0],
+            ["selfClaim", "claude", -4.0],
+            ["selfClaim", "openai", -4.0],
+            ["selfClaim", "deepseek", -4.0],
+            ["selfClaim", "qwen", -4.0],
+            ["selfClaim", "gemini", -4.0],
+            ["selfClaim", "llama", -4.0],
+            ["selfClaim", "mistral", -4.0],
+            ["selfClaim", "kiro", -4.0],
+        ],
+    },
 ];
 function claimedModelToFamily(claimedModel) {
     const m = claimedModel.toLowerCase();
@@ -276,6 +319,13 @@ function claimedModelToFamily(claimedModel) {
         return "deepseek";
     if (m.includes("glm") || m.includes("zhipu") || m.includes("z-ai"))
         return "zhipu";
+    // xAI (2026-07-10). MUST mirror modelIdToFamily() in lib/backtest-scorer.ts. This map labels
+    // every probe_baselines corpus row; an unlabelled row never votes for its family, and the
+    // baselineMatchVotes signal carries llmmapWeight=10 — far above any FAMILY_BASELINES weight.
+    // Omitting it made a real grok-4.5 endpoint score anthropic @82% on corpus similarity alone
+    // (dev end-to-end 2026-07-10), after which V3H strong-passed claude-haiku-4.5 → a false 已替換.
+    if (m.includes("grok") || m.includes("x-ai") || m.includes("xai"))
+        return "xai";
     return undefined;
 }
 //# sourceMappingURL=fingerprint-baseline.js.map

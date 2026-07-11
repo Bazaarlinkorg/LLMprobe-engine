@@ -5,6 +5,8 @@
 針對 OpenAI-compatible API 端點的開源 CLI 測試工具與 Node.js 函式庫。  
 執行品質、安全性、完整性、身份識別探針，產出 0–100 評分報告。
 
+> **v0.10.0** (2026-07-11)：同步 production 誤判稽核後的 V3H 修正。Validated policy 的 decisive posterior 現在可走 **strong-pass authoritative override**，不再被不適用於多模型叢集的 vote-margin 靜默壓成 abstain；新增 false-abstain/regating helpers、V4 abstain 候選 family scoping、`zhipu ↔ z-ai` canonical family、GLM 5.x / GPT-5.6 / xAI Grok V3H 叢集、過期 baseline 可觀測標記，以及供下游對抗重放使用的 deterministic relay-noise transforms。34 個測試檔 / 380 個測試。
+>
 > **v0.9.0** (2026-07-02)：新增 **層⑥ V3H border-probe 分佈指紋分類器**（bias-fingerprint）— 以短「隨機選擇」探針（隨機國家 / 1–100 / 動物 / 顏色 / 字母 / 星期 / 0 是否為自然數）的**答案分佈**分辨 V3/V3E/V3F 特徵重疊、無法分開的**同家族兄弟模型**：`gpt-5.5 ↔ gpt-5.3-codex`、`deepseek-v4-flash ↔ pro`、以及 **9 模型 Claude 叢集**（opus-4.5/4.6/4.7/4.8、sonnet-4.5/4.6/5、haiku-4.5、fable-5），離線交叉誤判 **0%**、叢集外冒充自動 abstain。同時新增 **V5 Family Fusion**（`confirmedFamily` 單一家族來源，宣稱模型不能污染候選範圍，堵住 claim-scoped 假接受）、**H4 絕對擬合下限 + H5 baseline 新鮮度閘**、**原生空拒答簽章**（Claude 5 結構化空拒答指紋）與 **行為家族否決**（family veto）。離線 baseline 擴充至 **33 個模型**（新增 deepseek-v4-flash/pro、glm-5/5.1/5.2、claude-opus-4.7/4.8、claude-sonnet-5、claude-fable-5、gpt-5.4/5.5/5.3-codex、gemini-3.1）。32 個測試檔 / 314 個測試。
 >
 > **v0.8.0** (2026-05-24)：新增 **層⑤ V4 集成融合分類器**（V3 Scoped + V3 Global + IKP 四階優先級融合），新增 **IKP（Inherent Knowledge Probe）5 個事實探針**用於兄弟模型一致性驗證，新增 **Bayesian 子模型評分**與 **identity-v2 家族分類器**，新增 **LLMmap 風格基準匹配投票**（`baseline-match-votes`）。28 個測試檔 / 298 個測試。V4 攻擊準確度方法論見 [`docs/reports/2026-05-10-v4-attack-accuracy.md`](docs/reports/2026-05-10-v4-attack-accuracy.md)。

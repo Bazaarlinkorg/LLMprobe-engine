@@ -1,9 +1,9 @@
-// src/fingerprint-extractor.ts — Rule-based behavioral feature extractor
+// lib/fingerprint-extractor.ts — Rule-based behavioral feature extractor
 
-import type { FingerprintFeatureSet } from "./identity-report.js";
-import { extractLinguisticFeatures } from "./linguistic-fingerprint.js";
-import { extractPerformanceFeatures, type ProbeItemLike } from "./performance-fingerprint.js";
-import { extractTextStructureFeatures, aggregateTextStructure, aggregateTimingFeatures, type TimedItem } from "./fingerprint-features-v2.js";
+import type { FingerprintFeatureSet } from "./identity-report";
+import { extractLinguisticFeatures } from "./linguistic-fingerprint";
+import { extractPerformanceFeatures, type ProbeItemLike } from "./performance-fingerprint";
+import { extractTextStructureFeatures, aggregateTextStructure, aggregateTimingFeatures, type TimedItem } from "./fingerprint-features-v2";
 
 /** Extract behavioral fingerprint features from probe response map. */
 export function extractFingerprint(
@@ -24,11 +24,13 @@ export function extractFingerprint(
     llama:    has(selfText, ["llama", "meta ai", "meta llama"]) ? 1 : 0,
     mistral:  has(selfText, ["mistral"]) ? 1 : 0,
     deepseek: has(selfText, ["deepseek"]) ? 1 : 0,
+    grok:     has(selfText, ["grok", "xai"]) ? 1 : 0,
     // Amazon Q Developer / Kiro: coding-agent wrapper injecting ~2000-token hidden system prompt
     kiro:     has(selfText, ["kiro", "amazon q developer", "kiro-cli"]) ? 1 : 0,
     vague: selfText.length > 0 && !has(selfText, [
       "claude", "anthropic", "chatgpt", "gpt", "openai", "qwen", "通义",
       "gemini", "llama", "mistral", "deepseek", "kiro", "amazon q",
+      "grok", "xai",
     ]) ? 1 : 0,
   };
 

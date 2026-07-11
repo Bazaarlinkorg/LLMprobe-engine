@@ -58,7 +58,14 @@ export type { SubModelCandidate, StoredModelFingerprint } from "./sub-model-matc
 // ── v0.6.0: Three-way cross-check (surface / behavior / v3) ───────────────
 // Identity verdict: the "三向交叉" logic that cross-checks three independent
 // fingerprint signals against the claimed model family to flag spoofing.
-export { computeVerdict, V3_HIGH_CONFIDENCE } from "./identity-verdict.js";
+export {
+  computeVerdict,
+  resolveV3HVerdictPatch,
+  recomputeVerdictAfterV3HOverride,
+  V3_HIGH_CONFIDENCE,
+  AMBIGUOUS_DOWNGRADE_MIN_FAMILY_CONFIDENCE,
+  AMBIGUOUS_DOWNGRADE_MAX_BEHAVIOR_SCORE,
+} from "./identity-verdict.js";
 export type {
   VerdictStatus,
   VerdictInput,
@@ -176,6 +183,11 @@ export {
   scoreBiasFingerprint,
   scoreV3HDistributionFingerprint,
   shouldPromoteSubModelFromV3H,
+  isStrongPassByPolicy,
+  requiredStrongPassGap,
+  isFalseAbstain,
+  regateV3HResult,
+  hasV3HSeparator,
   shouldFillSubModelFromV3G,
   filterFreshBiasBaselines,
   V3H_ACTIVE_PROMPT_POLICIES,
@@ -191,13 +203,32 @@ export {
 export type {
   BiasBaseline,
   BaselineFreshnessOpts,
+  ExpiredBiasBaseline,
   BiasObservation,
   V3GResult,
   V3HPolicy,
   V3HResult,
+  V3HSampleResult,
 } from "./sub-model-v3g-bias-fingerprint.js";
 
 export { BIAS_BASELINES } from "./sub-model-bias-baselines.js";
+
+// Canonical identity comparison shared by family/V3H consumers.
+export {
+  normalizeModelCore,
+  canonicalFamily,
+  modelIdsMatch,
+  canonicalizeModelId,
+  baseModelId,
+} from "./model-id-normalize.js";
+
+// Deterministic adversarial transforms for downstream regression gates.
+export {
+  blankRefusals,
+  wrapResponses,
+  thinBiasSamples,
+  injectBlanks,
+} from "./testing/relay-noise.js";
 
 // ── Detection registry (reversible disable list) ─────────────────────────
 export {

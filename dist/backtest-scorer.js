@@ -1,11 +1,11 @@
 "use strict";
-// src/backtest-scorer.ts — Linguistic-fingerprint-only scoring and backtest utilities
+// lib/backtest-scorer.ts — Linguistic-fingerprint-only scoring and backtest utilities
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.scoreLinguisticOnly = scoreLinguisticOnly;
 exports.scoreFullFeatureSet = scoreFullFeatureSet;
 exports.modelIdToFamily = modelIdToFamily;
 exports.computeAccuracy = computeAccuracy;
-const fingerprint_baseline_js_1 = require("./fingerprint-baseline.js");
+const fingerprint_baseline_1 = require("./fingerprint-baseline");
 /**
  * Score a linguisticFingerprint feature map against family baselines.
  * Only uses signals from the "linguisticFingerprint" category.
@@ -13,7 +13,7 @@ const fingerprint_baseline_js_1 = require("./fingerprint-baseline.js");
  */
 function scoreLinguisticOnly(lingFeatures) {
     const rawScores = [];
-    for (const baseline of fingerprint_baseline_js_1.FAMILY_BASELINES) {
+    for (const baseline of fingerprint_baseline_1.FAMILY_BASELINES) {
         let raw = 0;
         for (const [category, key, weight] of baseline.signals) {
             if (category !== "linguisticFingerprint")
@@ -25,6 +25,7 @@ function scoreLinguisticOnly(lingFeatures) {
         }
         rawScores.push({ family: baseline.family, raw });
     }
+    // Normalize: divide by max raw, clamp to [0, 1]
     const maxRaw = Math.max(...rawScores.map(s => s.raw), 1);
     const scores = rawScores.map(s => ({
         family: s.family,
@@ -38,7 +39,7 @@ function scoreLinguisticOnly(lingFeatures) {
  */
 function scoreFullFeatureSet(features) {
     const rawScores = {};
-    for (const baseline of fingerprint_baseline_js_1.FAMILY_BASELINES) {
+    for (const baseline of fingerprint_baseline_1.FAMILY_BASELINES) {
         let raw = 0;
         for (const [category, key, weight] of baseline.signals) {
             const catFeatures = features[category] ?? {};
@@ -47,7 +48,7 @@ function scoreFullFeatureSet(features) {
         rawScores[baseline.family] = raw;
     }
     const maxRaw = Math.max(...Object.values(rawScores), 0.0001);
-    return fingerprint_baseline_js_1.FAMILY_BASELINES
+    return fingerprint_baseline_1.FAMILY_BASELINES
         .map(b => ({
         family: b.family,
         score: Math.min(1, Math.max(0, rawScores[b.family] / maxRaw)),
@@ -78,6 +79,12 @@ function modelIdToFamily(modelId) {
         return "deepseek";
     if (m.includes("glm") || m.includes("zhipu") || m.includes("zhipuai/") || m.includes("z-ai"))
         return "zhipu";
+    // xAI (2026-07-10). Must come AFTER z-ai: "x-ai/..." contains no "z-ai", but keeping the
+    // two adjacent makes the near-collision obvious. Without this rule every grok id fell through
+    // to "unknown", which closes the V3H gate (`family !== "unknown"`) and left the sub-model
+    // layer blind to Grok while 14 grok routes were live.
+    if (m.includes("grok") || m.includes("x-ai/") || m.includes("xai/"))
+        return "xai";
     return "unknown";
 }
 /**

@@ -1,4 +1,4 @@
-import type { FingerprintFeatureSet } from "./identity-report.js";
+import type { FingerprintFeatureSet } from "./identity-report";
 export interface FamilyBaseline {
     family: string;
     displayName: string;

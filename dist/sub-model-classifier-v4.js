@@ -1,5 +1,5 @@
 "use strict";
-// src/sub-model-classifier-v4.ts — V4 ensemble fuse.
+// lib/sub-model/classifier-v4.ts — V4 ensemble fuse.
 //
 // V4 = V3 Scoped + V3 Global + IKP, fused via 4-tier priority (D''').
 // Replaces the V3F UI panel position (V3F still computed but no longer the
@@ -23,7 +23,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FAMILY_VETO_CONFIDENCE = exports.V3F_TIEBREAKER_GAP_MAX = exports.V3F_TIEBREAKER_THRESHOLD = exports.V4_GLOBAL_CONFIDENCE_THRESHOLD = void 0;
 exports.fuseToV4 = fuseToV4;
-const sub_model_detection_config_js_1 = require("./sub-model-detection-config.js");
+const sub_model_detection_config_1 = require("./sub-model-detection-config");
 /** Intentionally LOWER than V3's own 0.60 gate (classifier-v3.ts confidenceThreshold):
  *  V4 only reaches this check after family corroboration from multiple signals
  *  (fuse rules 1-4), so a 0.55 sub-model score is safer here than a raw V3 0.55.
@@ -80,6 +80,23 @@ function fuseToV4(v3Scoped, v3Global, ikp, _claimedFamily, v3f, emptyRefusal, v3
     const globalConfident = !!(globalTop && globalTop.score >= exports.V4_GLOBAL_CONFIDENCE_THRESHOLD);
     const ikpTop = ikp?.top ?? null;
     const crossFamilyDisagreement = !!(scopedTop && globalTop && scopedTop.family !== globalTop.family);
+    // Abstain-path guard: when the fuse abstains but a confident behavioural
+    // family exists, strip any cross-family V3-Global noise from `candidates` so
+    // display surfaces never surface e.g. a stray glm/gemini as the "detected
+    // family / sub-model". Confident picks are already family-consistent, so this
+    // only touches abstained outputs. May leave `candidates` empty — that is
+    // correct (family-only verdict).
+    function scopeAbstainCandidates(out) {
+        if (!out.abstained)
+            return out;
+        const fam = behavioralFamily && behavioralFamily.confidence >= exports.FAMILY_VETO_CONFIDENCE
+            ? behavioralFamily.family
+            : null;
+        if (!fam)
+            return out;
+        const scoped = out.candidates.filter((c) => c.family === fam);
+        return { ...out, candidates: scoped };
+    }
     // Helper: wrap any verdict with V3F tiebreaker (rule 1.5).
     // Only fires for openai gpt-5.5 ↔ gpt-5.3-codex feature-overlap pair.
     function withTiebreaker(out) {
@@ -110,7 +127,7 @@ function fuseToV4(v3Scoped, v3Global, ikp, _claimedFamily, v3f, emptyRefusal, v3
         if (!familyContradicts)
             return t;
         const fam = behavioralFamily?.family;
-        const excluded = (id) => (0, sub_model_detection_config_js_1.isDetectionDisabled)(id) || !!emptyRefusal?.isEmptyRefusalModel(id);
+        const excluded = (id) => (0, sub_model_detection_config_1.isDetectionDisabled)(id) || !!emptyRefusal?.isEmptyRefusalModel(id);
         const candidates = [];
         if (v3eTop && !excluded(v3eTop.modelId))
             candidates.push({ m: v3eTop, src: "v3e" });
@@ -132,13 +149,13 @@ function fuseToV4(v3Scoped, v3Global, ikp, _claimedFamily, v3f, emptyRefusal, v3
             };
         }
         // No in-family / detectable candidate to fall back to — abstain (family-only).
-        return {
+        return scopeAbstainCandidates({
             subModelMatch: null,
             candidates: t.candidates,
             abstained: true,
             fuseSource: "abstain",
             crossFamilyDisagreement: true,
-        };
+        });
     }
     // Rule 1 & 2: V3 Scoped hit
     if (scopedTop && !scopedAbstain) {
@@ -231,13 +248,13 @@ function fuseToV4(v3Scoped, v3Global, ikp, _claimedFamily, v3f, emptyRefusal, v3
                 crossFamilyDisagreement: false,
             };
         }
-        return {
+        return scopeAbstainCandidates({
             subModelMatch: null,
             candidates: v3Global?.candidates ?? [],
             abstained: true,
             fuseSource: "abstain",
             crossFamilyDisagreement: true,
-        };
+        });
     }
     // Rule 4: V3 Scoped abstain + V3 Global abstain/low-conf + IKP hit (same family or no familyImplied)
     // Routed through finalize() so a confident behavioural family vetoes a cross-family IKP
@@ -264,12 +281,12 @@ function fuseToV4(v3Scoped, v3Global, ikp, _claimedFamily, v3f, emptyRefusal, v3
         });
     }
     // Rule 5: all abstain
-    return {
+    return scopeAbstainCandidates({
         subModelMatch: null,
         candidates: [],
         abstained: true,
         fuseSource: "abstain",
         crossFamilyDisagreement: false,
-    };
+    });
 }
 //# sourceMappingURL=sub-model-classifier-v4.js.map
