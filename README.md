@@ -5,6 +5,8 @@
 針對 OpenAI-compatible API 端點的開源 CLI 測試工具與 Node.js 函式庫。  
 執行品質、安全性、完整性、身份識別探針，產出 0–100 評分報告。
 
+> **⚠️ v0.10.1** (2026-08-07)：**安全性修復，建議所有使用者升級。** V3E 拒絕梯度（`v3e_refusal_l1`–`l8`，Sub-Model 層④）原本含有害內容類別（爆裂物、毒品合成、勒索軟體、自傷方法、跟蹤監視、氯氣化學武器、詐騙話術、SQL 注入），**已於本版整批改寫為無害的「金融／法律建議過度承諾」軸線**（探針 id 不變，僅內容替換）。舊版本的探針在部分上游供應商的新內容風控下，**已證實會導致帳號被停權**（`gpt-5.4`/`gpt-5.6` 全數收到 502 Policy Violation）；同步新增永久性防護測試，防止未來的「提升鑑別度」修改再次意外引入有害內容。**離線 baseline 快照已同步重建**（34 個模型，取自改版後重新收集的資料，不含任何用舊探針收集的過期資料）。
+>
 > **v0.10.0** (2026-07-11)：同步 production 誤判稽核後的 V3H 修正。Validated policy 的 decisive posterior 現在可走 **strong-pass authoritative override**，不再被不適用於多模型叢集的 vote-margin 靜默壓成 abstain；新增 false-abstain/regating helpers、V4 abstain 候選 family scoping、`zhipu ↔ z-ai` canonical family、GLM 5.x / GPT-5.6 / xAI Grok V3H 叢集、過期 baseline 可觀測標記，以及供下游對抗重放使用的 deterministic relay-noise transforms。34 個測試檔 / 380 個測試。
 >
 > **v0.9.0** (2026-07-02)：新增 **層⑥ V3H border-probe 分佈指紋分類器**（bias-fingerprint）— 以短「隨機選擇」探針（隨機國家 / 1–100 / 動物 / 顏色 / 字母 / 星期 / 0 是否為自然數）的**答案分佈**分辨 V3/V3E/V3F 特徵重疊、無法分開的**同家族兄弟模型**：`gpt-5.5 ↔ gpt-5.3-codex`、`deepseek-v4-flash ↔ pro`、以及 **9 模型 Claude 叢集**（opus-4.5/4.6/4.7/4.8、sonnet-4.5/4.6/5、haiku-4.5、fable-5），離線交叉誤判 **0%**、叢集外冒充自動 abstain。同時新增 **V5 Family Fusion**（`confirmedFamily` 單一家族來源，宣稱模型不能污染候選範圍，堵住 claim-scoped 假接受）、**H4 絕對擬合下限 + H5 baseline 新鮮度閘**、**原生空拒答簽章**（Claude 5 結構化空拒答指紋）與 **行為家族否決**（family veto）。離線 baseline 擴充至 **33 個模型**（新增 deepseek-v4-flash/pro、glm-5/5.1/5.2、claude-opus-4.7/4.8、claude-sonnet-5、claude-fable-5、gpt-5.4/5.5/5.3-codex、gemini-3.1）。32 個測試檔 / 314 個測試。
