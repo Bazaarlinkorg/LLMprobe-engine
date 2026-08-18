@@ -205,14 +205,20 @@ describe("V3H active prompt distribution fingerprint", () => {
 
   describe("STRONG PASS waives the vote-margin gate (validated policy only)", () => {
     // Synthesize a decisive Claude-cluster observation whose per-probe single-winner is
-    // spread across the 9 siblings (probeVoteMargin ≤ 0) but whose summed log-likelihood
+    // spread across the (now 10) siblings (probeVoteMargin ≤ 0) but whose summed log-likelihood
     // posterior is ~100% — the exact pattern that made 15 prod runs abstain.
+    //
+    // Measured 2026-07-25 (after opus-5 grew the cluster from 9 → 10 members): with `truth` =
+    // opus-4.8, the modal-answer construction below now WINS the per-probe vote by margin=+1,
+    // because opus-5 no longer siphons off any of opus-4.8's modal votes. opus-4.6 still lands
+    // at margin=-1 (opus-4.7 and sonnet-5 land at exactly 0). Opus-4.6 is used here as it best
+    // demonstrates the sub-zero case the strong-pass waiver exists for.
     const claudeCandidates = () => BIAS_BASELINES.filter((b) => b.modelId.startsWith("anthropic/"));
 
     it("a decisive posterior with vote-margin 0 no longer abstains under a validated policy", () => {
       const cands = claudeCandidates();
       const policy = V3H_ACTIVE_PROMPT_POLICIES.find((p) => p.id === "anthropic-claude-cluster")!;
-      const truth = "anthropic/claude-opus-4.8";
+      const truth = "anthropic/claude-opus-4.6";
       const baseline = cands.find((c) => c.modelId === truth)!;
       // Draw the dominant (modal) answer for each active probe → strongly favors `truth`.
       const obs = policy.activeProbeIds.map((probeId) => {

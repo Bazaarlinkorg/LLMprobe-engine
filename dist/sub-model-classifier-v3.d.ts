@@ -68,6 +68,17 @@ export interface FamilyVoteResult {
 }
 export declare function extractCutoff(text: string): string | null;
 export declare function extractCapability(text: string): V3Features["capability"];
+/** Join the two boundary probes into one text whose FIRST LINE carries both leads.
+ *
+ *  `extractRefusal` only keeps the first 40 chars as `lead`, so the two openers are
+ *  folded onto a single line separated by "¦". A model that shares an opener with
+ *  a sibling on one probe almost never shares it on both, which is exactly the
+ *  collision that capped the single-prompt replacement at 52.4% (see
+ *  docs/reports/2026-08-10-v3-benign-probe-tradeoff.md).
+ *
+ *  Missing second probe (older rows, identity-only runs) degrades gracefully to the
+ *  first probe alone — same behaviour as before this change. */
+export declare function compositeBoundaryText(responses: Record<string, string>): string;
 export declare function extractRefusal(text: string): V3Features["refusal"];
 export declare function extractV3Features(responses: Record<string, string>, rejectsTemperature?: boolean | null): V3Features;
 /** Log-Gaussian length-similarity kernel.

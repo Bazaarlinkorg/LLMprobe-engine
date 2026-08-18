@@ -16,11 +16,16 @@ import { V3_BASELINES, getBaselinesForFamily, getAllFamilies } from "./sub-model
 import { buildUniquenessMap, uniquenessBoost } from "./sub-model-v3-uniqueness.js";
 import { getCachedBaselines } from "./sub-model-baselines-v3-store.js";
 import { inferFamilyVotesFromV3EResponses, type V3EFamilyVote } from "./sub-model-classifier-v3e.js";
+import { filterDetectable } from "./sub-model-detection-config.js";
+import { sameFamilyTieGap } from "./sub-model-tie-break.js";
 
 // Returns the current baseline pool from the DB-backed cache (falls back to
-// seed on cold start or DB error — classifier never breaks).
+// seed on cold start or DB error — classifier never breaks). Disabled detection
+// targets (e.g. models with no discriminating V3 feature) are excluded so they
+// can never be matched — any detection of an unservable model is a false
+// positive. See sub-model-detection-config.ts.
 function currentBaselines(): SubmodelBaselineV3[] {
-  return getCachedBaselines();
+  return filterDetectable(getCachedBaselines());
 }
 
 // Pre-computed once at module load — identifies per-baseline features that
@@ -125,6 +130,38 @@ export function extractCapability(text: string): V3Features["capability"] {
   return out as V3Features["capability"];
 }
 
+/** Join the two boundary probes into one text whose FIRST LINE carries both leads.
+ *
+ *  `extractRefusal` only keeps the first 40 chars as `lead`, so the two openers are
+ *  folded onto a single line separated by "¦". A model that shares an opener with
+ *  a sibling on one probe almost never shares it on both, which is exactly the
+ *  collision that capped the single-prompt replacement at 52.4% (see
+ *  docs/reports/2026-08-10-v3-benign-probe-tradeoff.md).
+ *
+ *  Missing second probe (older rows, identity-only runs) degrades gracefully to the
+ *  first probe alone — same behaviour as before this change. */
+export function compositeBoundaryText(responses: Record<string, string>): string {
+  const firstLineOf = (t: string) => (t.split(/\r?\n/).find((l) => l.trim()) ?? "").trim();
+  const a = responses.submodel_refusal ?? "";
+  const b = responses.submodel_selfspec ?? "";
+  if (!b) return a;
+  // The binding constraint is NOT `lead`'s 40-char storage — it is that scoring
+  // compares only `lead.slice(0, 20)`. Two 18-char heads fit the 40-char field
+  // but the second one falls outside the 20-char COMPARISON window, so it
+  // contributes nothing: measured 38% self-hit but only 22/28 pool-distinct,
+  // i.e. identical to using one prompt. 9 + separator + 9 = 19 chars puts both
+  // heads inside the compared prefix: 33% self-hit, 27/28 distinct. Slightly
+  // lower hit rate, far fewer collisions.
+  //
+  // If the comparison window in the scorer ever changes, this split must be
+  // re-derived — they are one design, not two independent constants.
+  const head = (t: string) => firstLineOf(t).slice(0, 9);
+  // Full texts follow so `length` sees both responses.
+  // Separator carries no spaces on purpose: 9 + 1 + 9 = 19 <= the 20-char window.
+  // " ¦ " would make it 21 and push the last char of head(b) back outside.
+  return `${head(a)}¦${head(b)}\n${a}\n${b}`;
+}
+
 export function extractRefusal(text: string): V3Features["refusal"] {
   // Anthropic models often prefix with empty newlines ("\n\nI can't ...").
   // Skip leading blanks so refusal lead + starts_with_* flags reflect the
@@ -156,7 +193,9 @@ export function extractV3Features(
   return {
     cutoff: extractCutoff(responses.submodel_cutoff ?? ""),
     capability: extractCapability(responses.submodel_capability ?? ""),
-    refusal: extractRefusal(responses.submodel_refusal ?? ""),
+    // Composite lead across TWO independent boundary probes (2026-08-10) — see
+    // compositeBoundaryText for why a single benign probe alone isn't enough.
+    refusal: extractRefusal(compositeBoundaryText(responses)),
     rejectsTemperature,
   };
 }
@@ -549,8 +588,9 @@ export function classifySubmodelV3(
 
   const candidates = scored.slice(0, 3);
   const firstMatch = scored[0] ?? null;
-  const runnerUp = scored[1];
-  const gap = firstMatch && runnerUp ? firstMatch.score - runnerUp.score : Infinity;
+  // Cross-family abstain guard: only a same-family sibling within the gap forces
+  // abstain (a close foreign-family candidate must not suppress a correct pick).
+  const gap = sameFamilyTieGap(scored);
   const abstained = firstMatch !== null && gap < TIE_BREAK_GAP;
   const top = (firstMatch && firstMatch.score >= threshold && !abstained) ? firstMatch : null;
   const familyMismatch = Boolean(
@@ -587,8 +627,7 @@ export function scoreExtractedFeatures(features: V3Features): V3Output {
   const sorted = [...matches].sort((a, b) => b.score - a.score);
   const candidates = sorted.slice(0, 3);
   const firstMatch = sorted[0] ?? null;
-  const runnerUp = sorted[1];
-  const gap = firstMatch && runnerUp ? firstMatch.score - runnerUp.score : Infinity;
+  const gap = sameFamilyTieGap(sorted);
   const abstained = firstMatch !== null && gap < TIE_BREAK_GAP;
 
   return {

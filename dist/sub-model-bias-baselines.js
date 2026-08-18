@@ -1757,6 +1757,104 @@ exports.BIAS_BASELINES = [
                 "apple": 1
             }
         }
+    },
+    {
+        "modelId": "anthropic/claude-opus-5",
+        "capturedAt": "2026-07-25",
+        "sampleCount": 900,
+        "probes": {
+            "rand_country": {
+                "uruguay": 41,
+                "mongolia": 4,
+                "paraguay": 6,
+                "ecuador": 1,
+                "bolivia": 2,
+                "madagascar": 2,
+                "nepal": 1,
+                "peru": 3
+            },
+            "rand_1to100": {
+                "73": 60
+            },
+            "rand_animal": {
+                "otter": 7,
+                "pangolin": 49,
+                "okapi": 4
+            },
+            "rand_color": {
+                "teal": 40,
+                "chartreuse": 10,
+                "cerulean": 1,
+                "vermilion": 2,
+                "periwinkle": 4,
+                "saffron": 1,
+                "crimson": 1,
+                "amber": 1
+            },
+            "rand_letter": {
+                "k": 56,
+                "r": 4
+            },
+            "day": {
+                "wednesday": 60
+            },
+            "zero_natural": {
+                "yes": 60
+            },
+            "rand_dwarf": {
+                "dopey": 55,
+                "doc": 3,
+                "grumpy": 2
+            },
+            "rand_gem": {
+                "sapphire": 60
+            },
+            "rand_month": {
+                "september": 57,
+                "march": 1,
+                "november": 2
+            },
+            "rand_city": {
+                "valparaso": 44,
+                "chiangmai": 4,
+                "tashkent": 3,
+                "casablanca": 1,
+                "tbilisi": 3,
+                "lisbon": 2,
+                "montevideo": 1,
+                "ljubljana": 1,
+                "chengdu": 1
+            },
+            "rand_bird": {
+                "robin": 35,
+                "sparrow": 25
+            },
+            "rand_element": {
+                "tungsten": 35,
+                "carbon": 16,
+                "neon": 9
+            },
+            "rand_bignum": {
+                "407": 1,
+                "437": 1,
+                "472": 4,
+                "473": 5,
+                "474": 4,
+                "537": 1,
+                "617": 3,
+                "637": 39,
+                "673": 1,
+                "738": 1
+            },
+            "rand_fruit": {
+                "persimmon": 2,
+                "papaya": 49,
+                "pomegranate": 3,
+                "lychee": 3,
+                "mango": 1,
+                "guava": 2
+            }
+        }
     }
 ];
 //# sourceMappingURL=sub-model-bias-baselines.js.map

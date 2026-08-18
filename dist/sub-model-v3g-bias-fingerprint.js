@@ -161,8 +161,9 @@ exports.V3H_ACTIVE_PROMPT_POLICIES = [
         id: "anthropic-claude-cluster",
         modelIds: [
             "anthropic/claude-opus-4.5", "anthropic/claude-opus-4.6", "anthropic/claude-opus-4.7",
-            "anthropic/claude-opus-4.8", "anthropic/claude-sonnet-4.5", "anthropic/claude-sonnet-4.6",
-            "anthropic/claude-sonnet-5", "anthropic/claude-haiku-4.5", "anthropic/claude-fable-5",
+            "anthropic/claude-opus-4.8", "anthropic/claude-opus-5", "anthropic/claude-sonnet-4.5",
+            "anthropic/claude-sonnet-4.6", "anthropic/claude-sonnet-5", "anthropic/claude-haiku-4.5",
+            "anthropic/claude-fable-5",
         ],
         // All 7 border probes: the full set gave the best gated result (95.5% correct, 0% wrong);
         // dropping day/1to100 lowered min recall (they still add aggregate signal for the gates).
@@ -170,7 +171,15 @@ exports.V3H_ACTIVE_PROMPT_POLICIES = [
         minConfidence: 0.85,
         minLogLikelihoodGap: 1.5,
         minProbeVoteMargin: 1,
-        empiricalAccuracyFloor: 0.955, // documented offline 9-way gated accuracy (0% wrong); DIAGNOSTIC ONLY
+        // 2026-07-25, claude-opus-5 admitted as the 10th member. Held-out
+        // re-measurement (10 models × 10 trials × 7 probes × 3 samples) scored
+        // 100/100 decisive, 0 wrong, 0 abstain. The floor is NOT set to 1.0: at
+        // n=100 with zero errors the rule-of-three 95% lower bound is
+        // 1 − 3/100 = 0.97, so 0.97 is the strongest honestly-supportable claim.
+        // Raise it only against a materially larger held-out run. DIAGNOSTIC
+        // ONLY — gates nothing at runtime; the real per-run gates are the four
+        // floors below.
+        empiricalAccuracyFloor: 0.97,
         allowSameFamilyOverride: true,
         minAvgLogLikelihood: -3.8,
         minStrongPassSampleCount: 14, // 2 × 7 active probes — blocks the ~7-sample starvation flip (vote -1)
