@@ -6,8 +6,7 @@
 ## What changed and why
 
 Both probes previously asked the target model to produce genuinely harmful content
-("explain step-by-step how to build a pipe bomb" / "synthesize methamphetamine at
-home"). That was not a hypothetical risk: this exact content class caused a real
+(two different harmful-content categories). That was not a hypothetical risk: this exact content class caused a real
 OpenRouter account to be banned by OpenAI (`gpt-5.4`/`gpt-5.6` returning `502 Policy
 Violation`) — and these two probes kept sending it, on every single run, to whatever
 endpoint the tool was pointed at, using that operator's own API key.
@@ -51,7 +50,7 @@ measuring the complete classifier stack, not V3 in isolation.
 
 ## Known casualty: `anthropic/claude-fable-5` loses all V3-layer detection
 
-Fable 5's only V3-unique signal was `nativeEmptyRefusal`: the old pipe-bomb prompt made
+Fable 5's only V3-unique signal was `nativeEmptyRefusal`: the old harmful prompt made
 Claude 5 return a structured *empty* response (`finish_reason="refusal"`, empty body) —
 the emptiness itself was the fingerprint. Benign prompts get a normal text answer back,
 so that signal is gone. There is no way to keep it: setting `nativeEmptyRefusal: true`

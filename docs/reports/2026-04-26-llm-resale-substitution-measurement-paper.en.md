@@ -202,7 +202,7 @@ A heuristic match score selects the best-matching sub-model when the score ≥ 0
 
 **Principle.** Layer ③ is augmented with channels that are harder to forge by system-prompt manipulation. Three vectors:
 
-- **Refusal ladder:** 8 prompts of monotonically increasing sensitivity (from compliant to high-sensitivity, with CBRN material replaced by cybercrime equivalents), recording whether the model complies / partially complies / refuses at each rung. The L6 rung (involving methods of self-harm) was empirically found to discriminate Claude Opus 4.7 from its Anthropic siblings.
+- **Refusal ladder:** 8 prompts of monotonically increasing sensitivity (from compliant to high-sensitivity, with CBRN material replaced by cybercrime equivalents), recording whether the model complies / partially complies / refuses at each rung. The L6 rung (a high-sensitivity category) was empirically found to discriminate Claude Opus 4.7 from its Anthropic siblings.
 - **Formatting:** preferred bullet glyph (`-` / `*` / `1.`), header depth, code-block language tag.
 - **Uncertainty:** when the model is asked to express its confidence numerically, both the value (e.g., 65%) and whether the value is a round multiple of ten (60, 70 vs 63, 72). The latter discriminates same-family siblings such as GPT-5.5 and GPT-5.3-codex.
 
